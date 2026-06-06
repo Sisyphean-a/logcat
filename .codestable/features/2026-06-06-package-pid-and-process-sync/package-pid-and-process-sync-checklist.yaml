@@ -1,0 +1,48 @@
+feature: 2026-06-06-package-pid-and-process-sync
+created: 2026-06-06
+
+steps:
+  - action: "按 design 2.5 拆分 internal/adb/service.go 责任：先把现有设备相关逻辑拆到独立文件"
+    exit_signal: "internal/adb 的现有测试和 go test ./... 继续通过，NewService 与 DetectADB/ListDevices 签名不变"
+    status: done
+
+  - action: "ADB 发现骨架：补 PackageScope、ListPackages、CurrentForegroundPackage、ListProcesses 及其解析单测"
+    exit_signal: "纯 adb 单测可驱动包范围、前台包、相关进程解析行为"
+    status: done
+
+  - action: "会话绑定骨架：扩展 session.Config、本地 PID 过滤、controller 包/进程绑定状态与切换"
+    exit_signal: "设备级、包级、进程级三种绑定模式都能通过纯单测验证"
+    status: done
+
+  - action: "UI 左侧绑定面板：接入包范围、前台 App、包列表和进程列表，并驱动 controller"
+    exit_signal: "界面能真实点击这些入口并切换当前绑定上下文"
+    status: done
+
+  - action: "PID 重绑与收尾验证：检测 PID 变化、显式状态更新并完成全量验证"
+    exit_signal: "App 重启后能自动重绑；go test ./... 与 go build ./cmd/logcatviewer 通过"
+    status: done
+
+checks:
+  - item: "设备选中后能加载用户 App 列表，并默认保留设备级 H5 会话"
+    source: 验收场景
+    status: passed
+
+  - item: "一键选择前台 App 后，包和进程上下文会同步切换"
+    source: 验收场景
+    status: passed
+
+  - item: "选中未运行 App 时显式提示 app_not_running，不继续沿用旧绑定"
+    source: 流程级约束
+    status: passed
+
+  - item: "选中包或进程后，只显示匹配 PID 的 H5 日志"
+    source: 名词契约
+    status: passed
+
+  - item: "PID 变化后会自动重绑并给出可见状态"
+    source: 验收场景
+    status: passed
+
+  - item: "切换设备后会清空包/进程/BoundPIDs 等绑定状态"
+    source: 流程级约束
+    status: passed

@@ -1,0 +1,67 @@
+roadmap: logcat-viewer
+created: 2026-06-05
+
+items:
+  - slug: single-device-h5-loop
+    description: 单窗口深色主题下完成 ADB 检测、设备选择、实时 chromium 与 [H5] 日志查看的最小闭环
+    depends_on: []
+    status: done
+    feature: 2026-06-05-single-device-h5-loop
+    minimal_loop: true
+    notes: MVP 最小闭环
+
+  - slug: viewer-controls-and-search
+    description: 补齐暂停恢复、清空视图、复制日志、基础搜索、自动滚动与详情面板
+    depends_on: [single-device-h5-loop]
+    status: done
+    feature: 2026-06-06-viewer-controls-and-search
+    minimal_loop: false
+    notes: null
+
+  - slug: package-pid-and-process-sync
+    description: 加入包名选择、前台应用识别、PID/进程过滤与应用重启自动重绑
+    depends_on: [single-device-h5-loop]
+    status: done
+    feature: 2026-06-06-package-pid-and-process-sync
+    minimal_loop: false
+    notes: null
+
+  - slug: query-language-and-saved-filters
+    description: 实现高级查询语言、Level/Tag/Message/Age/Regex/否定逻辑、保存过滤器与历史
+    depends_on: [viewer-controls-and-search, package-pid-and-process-sync]
+    status: in-progress
+    feature: 2026-06-06-query-language-and-saved-filters
+    minimal_loop: false
+    notes: null
+
+  - slug: rich-log-details-and-crash-detection
+    description: 完成 WebView console 结构化、JSON/URL 识别、多行堆栈与崩溃类型识别
+    depends_on: [single-device-h5-loop]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: null
+
+  - slug: export-workspace-and-settings
+    description: 完成导出、工作区、设置恢复、脱敏和日志包输出
+    depends_on: [query-language-and-saved-filters, rich-log-details-and-crash-detection]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: null
+
+  - slug: multi-session-wifi-and-layout
+    description: 完成多 Tab、多窗口、分屏、多设备并行、Wi-Fi ADB 与自动重连
+    depends_on: [viewer-controls-and-search, package-pid-and-process-sync, export-workspace-and-settings]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: null
+
+  - slug: editor-ai-and-plugin-extensions
+    description: 完成 VSCode 跳转、source 映射、AI 分析、统计图、回放、共享过滤器、远程采集与插件边界
+    depends_on: [multi-session-wifi-and-layout, rich-log-details-and-crash-detection, export-workspace-and-settings]
+    status: planned
+    feature: null
+    minimal_loop: false
+    notes: null

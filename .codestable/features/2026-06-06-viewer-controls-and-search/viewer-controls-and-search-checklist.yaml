@@ -1,0 +1,48 @@
+feature: 2026-06-06-viewer-controls-and-search
+created: 2026-06-06
+
+steps:
+  - action: "按 design 2.5 做 UI 微重构：拆分 shell、设备区、日志区、工具栏、详情区文件"
+    exit_signal: "internal/ui 的拆分完成且 go test ./...、go build ./cmd/logcatviewer 仍通过"
+    status: done
+
+  - action: "controller 状态骨架：加入暂停缓冲、搜索状态、选中态和清空视图操作"
+    exit_signal: "纯 controller 单测可驱动暂停/恢复/清空/搜索/选中行为"
+    status: done
+
+  - action: "采集与搜索联动：日志进入时按 paused/visible 分流，并自动重算搜索匹配"
+    exit_signal: "新增日志、暂停缓冲、恢复保留/丢弃都能让可见列表和搜索结果保持一致"
+    status: done
+
+  - action: "UI 工具栏与详情面板：接入暂停/恢复、清空、搜索、复制、详情渲染"
+    exit_signal: "界面能真实点击这些控件并驱动 controller，详情区展示当前选中日志"
+    status: done
+
+  - action: "自动跟随与收尾验证：接入滚动跟随开关并完成全量验证"
+    exit_signal: "手动滚离底部后停止跟随，点击按钮恢复；测试和构建通过"
+    status: done
+
+checks:
+  - item: "暂停后采集继续、UI 不追加且状态区显示缓冲计数"
+    source: 验收场景
+    status: passed
+
+  - item: "恢复时支持保留或丢弃暂停期间日志"
+    source: 流程级约束
+    status: passed
+
+  - item: "清空视图只清当前界面数据，不调用 adb logcat -c"
+    source: 范围守护
+    status: passed
+
+  - item: "基础搜索只作用于当前可见日志，并支持上一条/下一条跳转"
+    source: 名词契约
+    status: passed
+
+  - item: "点击日志后详情面板展示原始日志、解析字段、message 和复制按钮"
+    source: 验收场景
+    status: passed
+
+  - item: "手动滚离底部会停止自动跟随，按钮可恢复"
+    source: 验收场景
+    status: passed

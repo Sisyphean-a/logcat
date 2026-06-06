@@ -1,0 +1,31 @@
+package logcat
+
+import "testing"
+
+func TestParseThreadtimeLineParsesChromiumConsole(t *testing.T) {
+	line := `06-04 16:42:18.479 10665 10665 I chromium: [INFO:CONSOLE(618)] "[H5] connected", source: http://127.0.0.1/app.js (618)`
+
+	entry, err := ParseThreadtimeLine("device-1", line)
+	if err != nil {
+		t.Fatalf("ParseThreadtimeLine returned error: %v", err)
+	}
+	if entry.DeviceID != "device-1" {
+		t.Fatalf("expected device-1, got %q", entry.DeviceID)
+	}
+	if entry.Tag != "chromium" {
+		t.Fatalf("expected chromium tag, got %q", entry.Tag)
+	}
+	if entry.Level != "I" {
+		t.Fatalf("expected level I, got %q", entry.Level)
+	}
+	if !MatchesH5Preset(entry) {
+		t.Fatalf("expected entry to match H5 preset")
+	}
+}
+
+func TestParseThreadtimeLineRejectsInvalidInput(t *testing.T) {
+	_, err := ParseThreadtimeLine("device-1", "broken line")
+	if err == nil {
+		t.Fatal("expected parse error for broken line")
+	}
+}

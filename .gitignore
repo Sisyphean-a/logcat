@@ -1,0 +1,35 @@
+# Go build outputs
+/bin/
+/build/
+/dist/
+/logcatviewer
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Coverage
+.coverprofile
+*.coverprofile
+coverage.out
+coverage.html
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local tool caches / generated artifacts
+.codegraph/
+.artifacts/

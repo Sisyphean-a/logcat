@@ -1,0 +1,48 @@
+feature: 2026-06-06-query-language-and-saved-filters
+created: 2026-06-06
+
+steps:
+  - action: "查询语法骨架：建 internal/query，落 level/tag/message/age/regex/否定/逻辑匹配单测"
+    exit_signal: "internal/query 纯单测能覆盖编译、正则错误、逻辑优先级和 age 语义"
+    status: pending
+
+  - action: "controller 过滤状态骨架：补规范日志缓冲、FilterQueryState、Apply/Clear/History/Save 行为"
+    exit_signal: "应用 query 能重算当前 VisibleLogs，非法 query 保留旧结果且显式报错"
+    status: pending
+
+  - action: "最小持久化：建 internal/storage 文件存取并接入启动恢复"
+    exit_signal: "保存过滤器和历史在 controller 重建或进程重启后仍能恢复"
+    status: pending
+
+  - action: "UI 查询与过滤器面板：接入 query 编辑、应用/清空/保存、历史/已保存过滤器点击回放"
+    exit_signal: "界面能真实驱动 controller，且当前搜索当前视图继续工作"
+    status: pending
+
+  - action: "全量验证与收尾：补 runtime 证据、校验 roadmap/checklist、跑全量测试"
+    exit_signal: "go test ./... 与 go build ./cmd/logcatviewer 通过，关键查询场景有验收证据"
+    status: pending
+
+checks:
+  - item: "应用合法查询后，当前已缓存日志与后续新日志都会按同一规则过滤"
+    source: 验收场景
+    status: pending
+
+  - item: "非法查询显式报错，不会把主列表假装过滤成空，也不会丢掉上一条有效查询"
+    source: 流程级约束
+    status: pending
+
+  - item: "level/tag/message/age/regex/否定/AND/OR/括号语义都能通过纯单测证明"
+    source: 名词契约
+    status: pending
+
+  - item: "保存过滤器和查询历史会本地持久化，并在重启后恢复"
+    source: 验收场景
+    status: pending
+
+  - item: "搜索当前视图仍只作用于过滤后的 VisibleLogs，不被 query 语义覆盖"
+    source: 流程级约束
+    status: pending
+
+  - item: "代码中没有多 Tab 多查询容器、完整 workspace 持久化、命令层 --pid 探测或 package/process 查询语义"
+    source: 反向核对项
+    status: pending

@@ -1,0 +1,44 @@
+feature: 2026-06-05-single-device-h5-loop
+created: 2026-06-05
+
+steps:
+  - action: "桌面壳骨架：建立 Gio 窗口、深色主题和三栏基础布局"
+    exit_signal: "程序可启动并看到设备区、日志区、状态区的静态界面"
+    status: done
+
+  - action: "ADB 检测编排：接入 adb 定位与设备列表查询，并把结果投影到 ViewModel"
+    exit_signal: "启动后可观察到 adb 状态与设备列表；错误路径能进入状态区"
+    status: done
+
+  - action: "单会话骨架：在设备选择后启动唯一 logcat 会话并消费事件流"
+    exit_signal: "点击可用设备后会话状态进入 running，日志区开始接收事件"
+    status: done
+
+  - action: "解析与预设过滤：完成 threadtime 解析、本地 [H5] 过滤与可见缓冲更新"
+    exit_signal: "示例日志中只保留 chromium 且 message 含 [H5] 的条目"
+    status: done
+
+  - action: "错误态与收尾：补齐 adb 缺失、设备未授权、设备离线、解析失败的显式呈现"
+    exit_signal: "关键错误路径均有测试与 UI 状态证据，会话不会因异常输入崩溃"
+    status: done
+
+checks:
+  - item: "应用启动后必须显式展示 adb 检测结果"
+    source: 验收场景
+    status: passed
+
+  - item: "只有 device 状态设备允许启动会话"
+    source: 流程级约束
+    status: passed
+
+  - item: "日志区只显示 chromium 且 message 含 [H5] 的条目"
+    source: 名词契约
+    status: passed
+
+  - item: "adb 缺失时不可伪装成空设备列表"
+    source: 流程级约束
+    status: passed
+
+  - item: "本 feature 不引入包名选择、PID 过滤、多 Tab、多窗口"
+    source: 范围守护
+    status: passed
