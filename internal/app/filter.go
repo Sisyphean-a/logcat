@@ -19,14 +19,9 @@ func (c *Controller) ReplaceSavedFilters(filters []SavedFilter) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(filters) == 0 {
-		return
-	}
 	c.model.Filter.Saved = append(c.model.Filter.Saved[:0], filters...)
 	if _, ok := findSavedFilter(c.model.Filter.Saved, c.model.Filter.ActiveFilterID); !ok {
-		c.model.Filter.ActiveFilterID = c.model.Filter.Saved[0].ID
-		c.model.Filter.Draft = c.model.Filter.Saved[0].Query
-		c.model.Filter.Applied = c.model.Filter.Saved[0].Query
+		c.model.Filter.ActiveFilterID = ""
 	}
 	c.rebuildVisibleFromAllLogsLocked()
 }
@@ -160,7 +155,7 @@ func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) er
 
 func validateFilterQuery(query string) error {
 	if query == "" {
-		return fmt.Errorf("filter_query_required")
+		return nil
 	}
 
 	open := 0

@@ -8,7 +8,7 @@ export function createMockState() {
       { id: "SM-A217F", model: "SM-A217F", status: "device" },
     ],
     selectedDevice: "SM-A217F",
-    packageScope: "user",
+    packageScope: "all",
     packages: [
       { name: "xxx.hostapp" },
       { name: "xxx.hostapp.dev" },
@@ -24,18 +24,11 @@ export function createMockState() {
     totalLogs: 15,
     visibleCount: 13,
     filter: {
-      draft: "tag:chromium & message:[H5]",
-      applied: "tag:chromium & message:[H5]",
+      draft: "",
+      applied: "",
       error: "",
-      activeFilterId: "builtin-h5",
-      saved: [
-        {
-          id: "builtin-h5",
-          name: "H5 日志",
-          packageName: "",
-          query: "tag:chromium & message:[H5]",
-        },
-      ],
+      activeFilterId: "",
+      saved: [],
       history: [],
     },
     search: {

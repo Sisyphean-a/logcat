@@ -35,3 +35,21 @@ func TestParseThreadtimeLineRejectsInvalidInput(t *testing.T) {
 		t.Fatal("expected parse error for broken line")
 	}
 }
+
+func TestParseThreadtimeLineAcceptsTagsWithMultipleColons(t *testing.T) {
+	line := `06-09 16:30:28.224 25841 26156 D dist:vtcamera:PhoneTemperatureNotifier: tempV=31153, highTemperature_state=false`
+
+	entry, err := ParseThreadtimeLine("device-1", line)
+	if err != nil {
+		t.Fatalf("ParseThreadtimeLine returned error: %v", err)
+	}
+	if entry.Level != "D" {
+		t.Fatalf("expected level D, got %q", entry.Level)
+	}
+	if entry.Tag != "dist:vtcamera:PhoneTemperatureNotifier" {
+		t.Fatalf("unexpected tag: %q", entry.Tag)
+	}
+	if entry.Message != "tempV=31153, highTemperature_state=false" {
+		t.Fatalf("unexpected message: %q", entry.Message)
+	}
+}

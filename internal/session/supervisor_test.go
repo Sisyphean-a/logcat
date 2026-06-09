@@ -31,7 +31,7 @@ func TestSupervisorStreamsMatchingEntries(t *testing.T) {
 	source := stubSource{
 		lines: []string{
 			`06-04 16:42:18.479 10665 10665 I chromium: [H5] ok`,
-			`06-04 16:42:18.480 10665 10665 I chromium: ignored`,
+			`06-04 16:42:18.480 10665 10665 I ActivityManager: ignored`,
 		},
 	}
 
@@ -41,15 +41,20 @@ func TestSupervisorStreamsMatchingEntries(t *testing.T) {
 		t.Fatalf("Start returned error: %v", err)
 	}
 
-	event, ok := <-handle.Events()
-	if !ok {
-		t.Fatal("expected one entry event")
+	var messages []string
+	for event := range handle.Events() {
+		if event.Entry != nil {
+			messages = append(messages, event.Entry.Message)
+		}
 	}
-	if event.Entry == nil {
-		t.Fatal("expected log entry event")
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 entry events, got %d", len(messages))
 	}
-	if event.Entry.Message != "[H5] ok" {
-		t.Fatalf("expected [H5] ok, got %q", event.Entry.Message)
+	if messages[0] != "[H5] ok" {
+		t.Fatalf("expected first message [H5] ok, got %q", messages[0])
+	}
+	if messages[1] != "ignored" {
+		t.Fatalf("expected second message ignored, got %q", messages[1])
 	}
 }
 

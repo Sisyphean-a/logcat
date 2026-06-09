@@ -65,8 +65,6 @@ type Model struct {
 }
 
 func NewModel() Model {
-	defaults := defaultSavedFilters()
-	defaultQuery := defaults[0].Query
 	return Model{
 		Status:          "idle",
 		ADBStatus:       "未连接",
@@ -82,24 +80,13 @@ func NewModel() Model {
 		Logs:            []string{},
 		VisibleLogs:     []LogViewItem{},
 		Filter: FilterState{
-			Draft:          defaultQuery,
-			Applied:        defaultQuery,
-			ActiveFilterID: defaults[0].ID,
-			Saved:          defaults,
+			Draft:          "",
+			Applied:        "",
+			ActiveFilterID: "",
+			Saved:          []SavedFilter{},
 		},
 		Search:          SearchState{MatchIndexes: []int{}, Current: -1},
 		Pause:           PauseState{},
 		SelectedIndex:   -1,
-	}
-}
-
-func defaultSavedFilters() []SavedFilter {
-	return []SavedFilter{
-		{
-			ID:          "builtin-h5",
-			Name:        "H5 日志",
-			PackageName: "",
-			Query:       "tag:chromium & message:[H5]",
-		},
 	}
 }

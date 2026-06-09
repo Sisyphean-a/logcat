@@ -66,7 +66,7 @@ func (s Supervisor) forward(
 			events <- Event{Problem: err}
 			continue
 		}
-		if logcat.MatchesH5Preset(entry) && allowPID(cfg, entry.PID) {
+		if allowPID(cfg, entry.PID) {
 			events <- Event{Entry: &entry}
 		}
 	}

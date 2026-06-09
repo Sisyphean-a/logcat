@@ -55,9 +55,6 @@ func buildLogcatArgs(deviceID string) []string {
 		"logcat",
 		"-v",
 		"threadtime",
-		"-s",
-		"chromium:I",
-		"*:S",
 	}
 }
 

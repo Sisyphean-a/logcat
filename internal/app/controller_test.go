@@ -125,6 +125,48 @@ func TestControllerLoadUpdatesDevicesAndStatus(t *testing.T) {
 	}
 }
 
+func TestControllerNewModelStartsWithoutAppliedFilter(t *testing.T) {
+	model := NewModel()
+
+	if model.Filter.Draft != "" {
+		t.Fatalf("expected empty draft filter, got %q", model.Filter.Draft)
+	}
+	if model.Filter.Applied != "" {
+		t.Fatalf("expected empty applied filter, got %q", model.Filter.Applied)
+	}
+	if model.Filter.ActiveFilterID != "" {
+		t.Fatalf("expected no active preset, got %q", model.Filter.ActiveFilterID)
+	}
+	if len(model.Filter.Saved) != 0 {
+		t.Fatalf("expected no saved presets by default, got %#v", model.Filter.Saved)
+	}
+}
+
+func TestControllerApplyEmptyFilterShowsAllLogs(t *testing.T) {
+	events := make(chan session.Event, 2)
+	controller := newStreamingController(t, events)
+
+	events <- session.Event{Entry: &logcat.LogEntry{TimeText: "06-04 16:42:18.479", Level: "I", Tag: "ActivityManager", Message: "plain one", Raw: "plain one"}}
+	events <- session.Event{Entry: &logcat.LogEntry{TimeText: "06-04 16:42:18.480", Level: "I", Tag: "chromium", Message: "[H5] two", Raw: "[H5] two"}}
+
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 2
+	})
+
+	controller.SetFilterDraft("")
+	if err := controller.ApplyFilterDraft(); err != nil {
+		t.Fatalf("ApplyFilterDraft returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if len(model.VisibleLogs) != 2 {
+		t.Fatalf("expected all logs visible, got %d", len(model.VisibleLogs))
+	}
+	if model.Filter.Applied != "" {
+		t.Fatalf("expected applied filter cleared, got %q", model.Filter.Applied)
+	}
+}
+
 func TestControllerLoadADBMissingSetsExplicitStatus(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{

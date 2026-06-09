@@ -25,8 +25,9 @@ func main() {
 	controller := appstate.NewController(deviceService, supervisor)
 
 	if state, err := storage.LoadFilterState(); err == nil {
-		if len(state.Filters) > 0 {
-			controller.ReplaceSavedFilters(state.Filters)
+		filters := stripBuiltinFilters(state.Filters)
+		if len(filters) > 0 || len(state.Filters) > 0 {
+			controller.ReplaceSavedFilters(filters)
 		}
 		if len(state.History) > 0 {
 			controller.ReplaceFilterHistory(state.History)
@@ -53,4 +54,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func stripBuiltinFilters(filters []appstate.SavedFilter) []appstate.SavedFilter {
+	clean := make([]appstate.SavedFilter, 0, len(filters))
+	for _, filter := range filters {
+		if filter.ID == "builtin-h5" {
+			continue
+		}
+		clean = append(clean, filter)
+	}
+	return clean
 }

@@ -2,7 +2,6 @@ package logcat
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,29 +20,46 @@ type LogEntry struct {
 	Raw       string
 }
 
-var threadtimePattern = regexp.MustCompile(
-	`^(\d\d-\d\d \d\d:\d\d:\d\d\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+):\s(.*)$`,
-)
-
 func ParseThreadtimeLine(deviceID, line string) (LogEntry, error) {
-	match := threadtimePattern.FindStringSubmatch(line)
-	if match == nil {
+	fields := strings.Fields(line)
+	if len(fields) < 6 {
 		return LogEntry{}, fmt.Errorf("invalid threadtime line: %s", line)
 	}
 
-	message, source := parseChromiumConsoleMessage(match[6])
+	timeText := fields[0] + " " + fields[1]
+	rest := strings.TrimSpace(strings.Join(fields[5:], " "))
+	tag, messageText, ok := splitTagAndMessage(rest)
+	if !ok {
+		return LogEntry{}, fmt.Errorf("invalid threadtime line: %s", line)
+	}
+
+	message, source := parseChromiumConsoleMessage(messageText)
 	return LogEntry{
 		DeviceID:  deviceID,
-		Timestamp: parseTimestamp(match[1]),
-		TimeText:  match[1],
-		PID:       mustAtoi(match[2]),
-		TID:       mustAtoi(match[3]),
-		Level:     match[4],
-		Tag:       strings.TrimSpace(match[5]),
+		Timestamp: parseTimestamp(timeText),
+		TimeText:  timeText,
+		PID:       mustAtoi(fields[2]),
+		TID:       mustAtoi(fields[3]),
+		Level:     fields[4],
+		Tag:       tag,
 		Source:    source,
 		Message:   message,
 		Raw:       line,
 	}, nil
+}
+
+func splitTagAndMessage(value string) (string, string, bool) {
+	index := strings.Index(value, ": ")
+	if index == -1 {
+		return "", "", false
+	}
+
+	tag := strings.TrimSpace(value[:index])
+	message := strings.TrimSpace(value[index+2:])
+	if tag == "" {
+		return "", "", false
+	}
+	return tag, message, true
 }
 
 func mustAtoi(value string) int {
