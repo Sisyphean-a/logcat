@@ -63,6 +63,11 @@ func (c *Controller) SelectSavedFilter(id string) error {
 }
 
 func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
+	if id == "" {
+		c.clearSavedFilterSelection()
+		return nil
+	}
+
 	c.mu.RLock()
 	filter, ok := findSavedFilter(c.model.Filter.Saved, id)
 	currentPackage := c.model.SelectedPackage

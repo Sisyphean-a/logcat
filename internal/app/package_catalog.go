@@ -11,7 +11,7 @@ func (c *Controller) SetPackageScope(
 	scope adb.PackageScope,
 ) error {
 	c.mu.Lock()
-	c.model.PackageScope = scope
+	c.model.PackageScope = effectivePackageScope(scope)
 	c.mu.Unlock()
 
 	return c.RefreshPackages(ctx)

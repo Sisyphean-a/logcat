@@ -57,7 +57,7 @@ func (c *Controller) Model() Model {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.model
+	return cloneModel(c.model)
 }
 
 func (c *Controller) SetStatus(status string) {
@@ -90,6 +90,11 @@ func (c *Controller) Load(ctx context.Context) error {
 }
 
 func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
+	if deviceID == "" {
+		c.clearDeviceSelection()
+		return nil
+	}
+
 	device, err := c.findDevice(deviceID)
 	if err != nil {
 		c.updateStatus(err.Error())
@@ -109,7 +114,7 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 
 	c.mu.Lock()
 	c.binding = SessionBinding{DeviceID: deviceID}
-	c.model.PackageScope = adb.PackageScopeUser
+	c.model.PackageScope = adb.PackageScopeAll
 	c.model.SelectedDevice = deviceID
 	c.model.Packages = c.model.Packages[:0]
 	c.model.SelectedPackage = ""

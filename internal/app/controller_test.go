@@ -194,7 +194,7 @@ func TestControllerSelectDeviceLoadsUserPackages(t *testing.T) {
 				{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
 			},
 			packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
-				adb.PackageScopeUser: {
+				adb.PackageScopeAll: {
 					{Name: "com.demo.host"},
 					{Name: "com.demo.app"},
 				},
@@ -211,8 +211,8 @@ func TestControllerSelectDeviceLoadsUserPackages(t *testing.T) {
 	}
 
 	model := controller.Model()
-	if model.PackageScope != adb.PackageScopeUser {
-		t.Fatalf("expected default package scope user, got %q", model.PackageScope)
+	if model.PackageScope != adb.PackageScopeAll {
+		t.Fatalf("expected default package scope all, got %q", model.PackageScope)
 	}
 	if len(model.Packages) != 2 {
 		t.Fatalf("expected 2 user packages, got %d", len(model.Packages))
@@ -787,6 +787,81 @@ func TestControllerSelectDeviceClearsBindingState(t *testing.T) {
 	}
 	if len(model.Processes) != 0 {
 		t.Fatalf("expected processes cleared, got %#v", model.Processes)
+	}
+	if len(model.BoundPIDs) != 0 {
+		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)
+	}
+}
+
+func TestControllerSelectDeviceAllowsClearingSelection(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), ""); err != nil {
+		t.Fatalf("clearing device returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedDevice != "" {
+		t.Fatalf("expected device cleared, got %q", model.SelectedDevice)
+	}
+	if model.PackageScope != "" {
+		t.Fatalf("expected package scope cleared, got %q", model.PackageScope)
+	}
+	if model.Status != "idle" {
+		t.Fatalf("expected idle status, got %q", model.Status)
+	}
+}
+
+func TestControllerSelectPackageAllowsClearingSelection(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+			packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+				adb.PackageScopeAll: {{Name: "com.demo.host"}},
+			},
+			processesByPackage: map[string][]adb.ProcessInfo{
+				"com.demo.host": {{PID: 111, Name: "com.demo.host"}},
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
+		t.Fatalf("SelectPackage returned error: %v", err)
+	}
+	if err := controller.SelectPackage(context.Background(), ""); err != nil {
+		t.Fatalf("clearing package returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedPackage != "" {
+		t.Fatalf("expected package cleared, got %q", model.SelectedPackage)
+	}
+	if len(model.Processes) != 0 {
+		t.Fatalf("expected process list cleared, got %#v", model.Processes)
 	}
 	if len(model.BoundPIDs) != 0 {
 		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)

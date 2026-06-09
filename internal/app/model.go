@@ -72,7 +72,7 @@ func NewModel() Model {
 		ADBStatus:       "未连接",
 		Devices:         []DeviceItem{},
 		SelectedDevice:  "",
-		PackageScope:    adb.PackageScopeUser,
+		PackageScope:    adb.PackageScopeAll,
 		Packages:        []adb.PackageInfo{},
 		SelectedPackage: "",
 		Processes:       []adb.ProcessInfo{},

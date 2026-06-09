@@ -1,8 +1,10 @@
 # Go build outputs
 /bin/
-/build/
+/build/bin/
 /dist/
 /logcatviewer
+/frontend/node_modules/
+/frontend/dist/
 *.exe
 *.exe~
 *.dll

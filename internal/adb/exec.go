@@ -4,12 +4,15 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"runtime"
+	"syscall"
 )
 
 type ExecRunner struct{}
 
 func (ExecRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, name, args...)
+	hideWindow(command)
 	output, err := command.CombinedOutput()
 	return string(output), err
 }
@@ -20,6 +23,7 @@ func (ExecRunner) Start(
 	args ...string,
 ) (io.ReadCloser, <-chan error, error) {
 	command := exec.CommandContext(ctx, name, args...)
+	hideWindow(command)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return nil, nil, err
@@ -36,4 +40,11 @@ func (ExecRunner) Start(
 	}()
 
 	return stdout, done, nil
+}
+
+func hideWindow(command *exec.Cmd) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 }

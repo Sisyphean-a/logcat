@@ -16,6 +16,10 @@ type SessionBinding struct {
 }
 
 func (c *Controller) SelectPackage(ctx context.Context, packageName string) error {
+	if packageName == "" {
+		return c.clearPackageSelection(ctx)
+	}
+
 	deviceID, err := c.currentDeviceID()
 	if err != nil {
 		c.updateStatus(err.Error())

@@ -1,0 +1,2 @@
+!macro wails.custom
+!macroend

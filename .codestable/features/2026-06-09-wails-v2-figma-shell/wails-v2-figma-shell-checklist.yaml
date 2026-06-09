@@ -1,0 +1,27 @@
+feature: 2026-06-09-wails-v2-figma-shell
+steps:
+  - id: step-1
+    title: 替换桌面入口为 Wails v2 骨架
+    status: done
+    exit_signal: 主程序和构建配置切到 Wails，Gio 不再是入口
+  - id: step-2
+    title: 补齐 controller 状态通知和前端快照层
+    status: done
+    exit_signal: controller 快照可安全供前端轮询/推送使用
+  - id: step-3
+    title: 实现 Go 绑定层并接通核心交互
+    status: done
+    exit_signal: 前端能调用设备、过滤、暂停、导出、选中等动作
+  - id: step-4
+    title: 按 Figma 重建 React 前端界面
+    status: done
+    exit_signal: 主界面布局与设计稿一致并能展示实时状态
+  - id: step-5
+    title: 清理 Gio 遗留并完成构建验证
+    status: done
+    exit_signal: 测试、前端构建和 Wails 构建均通过
+checks:
+  - go test ./...
+  - npm install
+  - npm run build
+  - wails build
