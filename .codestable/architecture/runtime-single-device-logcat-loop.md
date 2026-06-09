@@ -2,10 +2,10 @@
 doc_type: architecture
 slug: single-device-logcat-loop
 scope: 当前 Go + Gio 单设备 H5 logcat 查看、基础控制与 package/pid 绑定链路
-summary: Gio 壳通过 controller 驱动 adb 检测、包/进程发现、单会话采集和 PID 绑定重启，只展示 chromium 与 [H5] 日志
+summary: Gio 壳通过 controller 驱动 adb 检测、包/进程发现、单会话采集和 PID 绑定重启，并在前端对 chromium 与 [H5] 日志做语义着色显示
 status: current
-last_reviewed: 2026-06-06
-tags: [go, gio, adb, logcat, pid]
+last_reviewed: 2026-06-09
+tags: [go, gio, adb, logcat, pid, frontend]
 depends_on: []
 implements: [h5-logcat-viewing]
 ---
@@ -24,10 +24,12 @@ implements: [h5-logcat-viewing]
 - **暂停缓冲**：暂停后仍被采集、但暂不进入 `VisibleLogs` 的 `logcat.LogEntry` 队列。
 - **当前匹配**：`SearchState.Current` 指向当前高亮的搜索命中，跳转时同步更新 `SelectedIndex`。
 - **自动跟随**：`ui.Shell` 基于 `widget.List.Position.BeforeEnd` 判断列表是否仍应贴底。
+- **行语义色**：前端日志表格按 `level + 常见消息模式` 推导出的基础色层，用来区分 `error/warn/request/stack/success/info`。
+- **轻量 token**：前端对单行 `message/source` 切出的少量特殊片段，如 URL、源码位置、HTTP 方法、错误词和堆栈前缀；它只在渲染时存在。
 
 ## 1. 定位与受众
 
-- 这份文档覆盖当前仓库已经落地的单设备运行链路：启动桌面程序、检测本机 `adb`、列出设备、加载包列表、切换前台包/进程绑定、按 PID 收窄 H5 日志，并在当前视图内做暂停/恢复、搜索、复制、详情查看与自动跟随。
+- 这份文档覆盖当前仓库已经落地的单设备运行链路：启动桌面程序、检测本机 `adb`、列出设备、加载包列表、切换前台包/进程绑定、按 PID 收窄 H5 日志，并在当前视图内做暂停/恢复、搜索、复制、详情查看、自动跟随与语义着色。
 - 读者主要是后续 feature 设计、问题分析和新接手代码的人。
 - 读完后应该能知道当前系统里包/进程绑定落在哪层、日志何时被 PID 过滤、PID 变化如何自动重绑，以及有哪些不能破坏的硬约束。
 
@@ -35,6 +37,7 @@ implements: [h5-logcat-viewing]
 
 - `cmd/logcatviewer/main.go` 负责装配依赖，把 `adb.ExecRunner`、`adb.Service`、`adb.LogcatSource`、`session.Supervisor`、`app.Controller` 和 `ui.Shell` 串起来。代码锚点：[main.go](/E:/github/logcat/cmd/logcatviewer/main.go:1)
 - `ui.Shell` 在启动时触发 `controller.Load()`，把 `adb version` 与 `adb devices -l` 的结果投影到界面；设备按钮、包范围、前台 App、包列表、进程列表、暂停/恢复、搜索、复制与跟随开关都在这里转成 controller 动作或 Gio 剪贴板命令。代码锚点：[shell.go](/E:/github/logcat/internal/ui/shell.go:1)、[interactions.go](/E:/github/logcat/internal/ui/interactions.go:1)、[package_process_panel.go](/E:/github/logcat/internal/ui/package_process_panel.go:1)
+- 前端 H5 预览壳在虚拟列表的单行渲染阶段叠加行语义色和轻量 token，不回推给 Go 层。代码锚点：[app-shell.tsx](/E:/github/logcat/frontend/src/app-shell.tsx:1)、[log-row.tsx](/E:/github/logcat/frontend/src/log-row.tsx:1)
 - `app.Controller` 是当前唯一的编排层：它读取设备服务结果、维护 `Model`、在设备选中后启动默认设备级 H5 会话并加载用户包列表，负责前台包/包名/进程选择、绑定状态、PID watcher、暂停缓冲、可见日志、搜索匹配和选中态。代码锚点：[controller.go](/E:/github/logcat/internal/app/controller.go:1)、[package_catalog.go](/E:/github/logcat/internal/app/package_catalog.go:1)、[binding.go](/E:/github/logcat/internal/app/binding.go:1)、[binding_watcher.go](/E:/github/logcat/internal/app/binding_watcher.go:1)、[logview.go](/E:/github/logcat/internal/app/logview.go:1)
 - `session.Supervisor` 负责把 `adb.LogcatSource` 产生的文本行转成事件流，先走 `logcat.ParseThreadtimeLine`，再走 `logcat.MatchesH5Preset`，最后按 `AllowedPIDs` 做本地 PID 过滤，只把符合 `chromium + [H5] + 当前绑定 PID 集` 的条目推给上层。代码锚点：[supervisor.go](/E:/github/logcat/internal/session/supervisor.go:1)
 - `adb.Service` 继续屏蔽 `adb` 命令细节，除 `DetectADB` / `ListDevices` 外，还负责 `ListPackages`、`CurrentForegroundPackage`、`ListProcesses` 三类发现行为。代码锚点：[service.go](/E:/github/logcat/internal/adb/service.go:1)、[device_service.go](/E:/github/logcat/internal/adb/device_service.go:1)、[package_service.go](/E:/github/logcat/internal/adb/package_service.go:1)、[process_service.go](/E:/github/logcat/internal/adb/process_service.go:1)
@@ -46,6 +49,7 @@ implements: [h5-logcat-viewing]
 - `adb.DeviceInfo` 表示一次 `adb devices -l` 解析结果，包含 `ID`、`Status`、`Model`、`Transport`。定义位置：[service.go](/E:/github/logcat/internal/adb/service.go:1)
 - `adb.PackageScope`、`adb.PackageInfo`、`adb.ProcessInfo` 表示包范围、包列表项和进程快照，是包/进程绑定能力的统一数据契约。定义位置：[service.go](/E:/github/logcat/internal/adb/service.go:1)
 - `app.Model` 是当前 UI 的唯一状态容器；除了状态文案、设备列表、可见日志、搜索态、暂停态和选中行外，还新增 `PackageScope`、`Packages`、`SelectedPackage`、`Processes`、`SelectedProcess`、`BoundPIDs`。定义位置：[model.go](/E:/github/logcat/internal/app/model.go:1)
+- 前端 H5 预览态继续只消费 `AppState.logs` 里的 `LogItemView` 原始字段；语义着色时产生的 `LogTextToken` 不进入 Wails 模型，也不参与持久化。定义位置：[models.ts](/E:/github/logcat/frontend/wailsjs/go/models.ts:29)、[log-row.tsx](/E:/github/logcat/frontend/src/log-row.tsx:4)
 - `app.SessionBinding` 保存当前运行态绑定的 `device / package / process / active PIDs`，是 PID 重绑的比较基准。定义位置：[binding.go](/E:/github/logcat/internal/app/binding.go:1)
 - `session.Config` 现在承载 `DeviceID`、`PackageName`、`ProcessName`、`AllowedPIDs`；controller 通过它把“设备级 / 包级 / 进程级”三种绑定模式下推到 `session.Supervisor`。定义位置：[supervisor.go](/E:/github/logcat/internal/session/supervisor.go:1)
 - `logcat.LogEntry` 继续承载解析后的 threadtime 行，`Raw` 保留原始输入，解析失败则直接把原始行写进错误消息，不丢现场。定义位置：[parser.go](/E:/github/logcat/internal/logcat/parser.go:1)
@@ -58,6 +62,7 @@ implements: [h5-logcat-viewing]
 - PID 过滤先在 `session.Supervisor` 的 H5 预设之后本地执行，不把 `--pid` 探测和命令层优化塞进当前 feature。代码锚点：[allowPID](/E:/github/logcat/internal/session/supervisor.go:84)
 - PID 重绑由 controller 自己轮询并编排“停旧会话 + 起新会话”，不把长期 watcher 塞进 `session.Supervisor`。代码锚点：[watchBinding](/E:/github/logcat/internal/app/binding_watcher.go:45)、[applyWatcherRunningBinding](/E:/github/logcat/internal/app/binding_watcher.go:127)
 - “前台 App”是显式一次性动作，不做持续自动前台跟随。代码锚点：[SelectForegroundPackage](/E:/github/logcat/internal/app/package_catalog.go:43)
+- 日志语义着色完全留在前端 `LogRow` 渲染层：只对虚拟列表可见行执行一次线性 token 扫描，不改 `AppState`、不改 controller、也不预处理全量日志。代码锚点：[LogTable](/E:/github/logcat/frontend/src/app-shell.tsx:138)、[LogRow](/E:/github/logcat/frontend/src/log-row.tsx:41)
 
 ## 5. 代码锚点
 
@@ -71,6 +76,8 @@ implements: [h5-logcat-viewing]
 - [process_service.go](/E:/github/logcat/internal/adb/process_service.go:1) `ListProcesses` / `processMatchesPackage` — 相关进程发现
 - [package_process_panel.go](/E:/github/logcat/internal/ui/package_process_panel.go:1) `layoutPackageProcessPanel` — 左侧绑定面板渲染
 - [interactions.go](/E:/github/logcat/internal/ui/interactions.go:1) `handleScopeClicks` / `handleForegroundClicks` / `handlePackageClicks` / `handleProcessClicks` — 绑定面板动作分发
+- [app-shell.tsx](/E:/github/logcat/frontend/src/app-shell.tsx:138) `LogTable` — 前端虚拟滚动列表
+- [log-row.tsx](/E:/github/logcat/frontend/src/log-row.tsx:41) `LogRow` / `tokenizeLogText` / `getLogSemanticTone` — 前端日志语义着色器
 
 ## 6. 已知约束 / 边界情况
 
@@ -81,6 +88,7 @@ implements: [h5-logcat-viewing]
 - 当前目标包未运行时会显式显示 `app_not_running`，目标进程消失时会显式显示 `process_not_running`，不会继续沿用旧 PID 集假装成功。来源：[binding.go](/E:/github/logcat/internal/app/binding.go:1)、[binding_watcher.go](/E:/github/logcat/internal/app/binding_watcher.go:1)
 - 当前不解析 App label、图标、版本号或 APK 元数据。来源：`rg -n "label|icon|versionName|versionCode|APK" cmd internal`
 - 当前没有高级查询、导出、工作区、多会话、Wi‑Fi ADB、多窗口或多设备并行能力；也还没有命令层 `--pid` 优化，这些都属于后续 feature。来源：[logcat-viewer-roadmap.md](/E:/github/logcat/.codestable/roadmap/logcat-viewer/logcat-viewer-roadmap.md:1)
+- 当前语义着色只服务前端扫读体验，不做逐字符高亮、ANSI 解析、真实链接跳转或后端 token 回填。来源：[log-row.tsx](/E:/github/logcat/frontend/src/log-row.tsx:20)
 
 ## 7. 相关文档
 

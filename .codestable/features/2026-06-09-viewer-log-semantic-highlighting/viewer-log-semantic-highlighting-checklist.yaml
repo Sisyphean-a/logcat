@@ -21,20 +21,20 @@ steps:
 checks:
   - item: "错误与警告日志在长列表中更容易扫出，但整体暗色稳定度不被破坏"
     source: 验收场景
-    status: pending
+    status: passed
 
   - item: "HTTP 方法、URL/路径、错误关键词、耗时/次数、源码位置和堆栈前缀能形成稳定色差"
     source: 名词契约
-    status: pending
+    status: passed
 
   - item: "selected/current/isMatch 仍然比语义着色更醒目"
     source: 流程级约束
-    status: pending
+    status: passed
 
   - item: "实现没有改动虚拟切片逻辑，也没有在 state.logs 全量预处理 token"
     source: 性能约束
-    status: pending
+    status: passed
 
   - item: "代码中没有后端 token 字段、真实外链导航、ANSI 解析器或逐字符高亮"
     source: 反向核对项
-    status: pending
+    status: passed
