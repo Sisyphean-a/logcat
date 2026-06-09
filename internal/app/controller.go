@@ -23,11 +23,16 @@ type SessionStarter interface {
 	Start(ctx context.Context, cfg session.Config) (session.Handle, error)
 }
 
+type DeviceTracker interface {
+	TrackDevices(ctx context.Context) (<-chan []adb.DeviceInfo, <-chan error, error)
+}
+
 type Controller struct {
 	deviceService DeviceService
 	sessionStart  SessionStarter
 
 	mu                  sync.RWMutex
+	dirtyCh             chan struct{}
 	model               Model
 	allLogs             []LogViewItem
 	revision            uint64
@@ -42,17 +47,18 @@ type Controller struct {
 const defaultBindingPollInterval = 500 * time.Millisecond
 
 func NewController(deviceService DeviceService, sessionStart SessionStarter) *Controller {
-		return &Controller{
-			deviceService:       deviceService,
-			sessionStart:        sessionStart,
-			model:               NewModel(),
-			allLogs:             []LogViewItem{},
-			revision:            1,
-			pauseBuffer:         []logcat.LogEntry{},
-			pauseBufferCap:      defaultPauseBufferCap,
-			bindingPollInterval: defaultBindingPollInterval,
-			binding:             SessionBinding{},
-		}
+	return &Controller{
+		deviceService:       deviceService,
+		sessionStart:        sessionStart,
+		dirtyCh:             make(chan struct{}, 1),
+		model:               NewModel(),
+		allLogs:             []LogViewItem{},
+		revision:            1,
+		pauseBuffer:         []logcat.LogEntry{},
+		pauseBufferCap:      defaultPauseBufferCap,
+		bindingPollInterval: defaultBindingPollInterval,
+		binding:             SessionBinding{},
+	}
 }
 
 func (c *Controller) Model() Model {
@@ -82,14 +88,10 @@ func (c *Controller) Load(ctx context.Context) error {
 	c.mu.Lock()
 	c.model.Status = "adb " + install.Version
 	c.model.ADBStatus = "已连接"
-	c.model.Devices = mapDevices(devices)
-	if len(c.model.Devices) > 0 {
-		c.model.SelectedDevice = c.model.Devices[0].ID
-	}
 	c.markDirtyLocked()
 	c.mu.Unlock()
 
-	return nil
+	return c.syncDevices(ctx, devices)
 }
 
 func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
@@ -176,6 +178,10 @@ func (c *Controller) updateStatus(status string) {
 
 	c.model.Status = status
 	c.markDirtyLocked()
+}
+
+func (c *Controller) Dirty() <-chan struct{} {
+	return c.dirtyCh
 }
 
 func mapDevices(devices []adb.DeviceInfo) []DeviceItem {

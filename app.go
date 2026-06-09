@@ -6,17 +6,18 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	appstate "github.com/xiakn/logcat/internal/app"
 	"github.com/xiakn/logcat/internal/storage"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const stateEventName = "state:updated"
 const uiLogWindowSize = 1000
+const emitThrottle = 16 * time.Millisecond
 
 type App struct {
-	ctx        context.Context
-	controller *appstate.Controller
+	ctx         context.Context
+	controller  *appstate.Controller
 	lastEmitRev uint64
 }
 
@@ -27,6 +28,7 @@ func NewApp(controller *appstate.Controller) *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.loadInitialState()
+	go a.trackDevices(ctx)
 	go a.pushStateLoop(ctx)
 }
 
@@ -154,26 +156,36 @@ func (a *App) CopyText(value string) error {
 }
 
 func (a *App) loadInitialState() {
-	if err := a.controller.Load(context.Background()); err == nil {
-		model := a.controller.Model()
-		if len(model.Devices) > 0 && model.SelectedDevice != "" {
-			_ = a.controller.RefreshPackages(context.Background())
-		}
-	}
+	_ = a.controller.Load(context.Background())
 	a.emitState()
 }
 
 func (a *App) pushStateLoop(ctx context.Context) {
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
+	timer := newStoppedTimer()
+	defer timer.Stop()
+	pending := false
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-a.controller.Dirty():
+			if pending {
+				continue
+			}
+			pending = true
+			timer.Reset(emitThrottle)
+		case <-timer.C:
+			pending = false
 			a.emitStateIfDirty()
 		}
+	}
+}
+
+func (a *App) trackDevices(ctx context.Context) {
+	if err := a.controller.TrackDevices(ctx); err != nil {
+		a.controller.SetStatus(err.Error())
+		a.emitState()
 	}
 }
 
@@ -213,4 +225,12 @@ func (a *App) emitAndSnapshot() AppState {
 		runtime.EventsEmit(a.ctx, stateEventName, state)
 	}
 	return state
+}
+
+func newStoppedTimer() *time.Timer {
+	timer := time.NewTimer(time.Hour)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	return timer
 }

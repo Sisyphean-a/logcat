@@ -1,8 +1,10 @@
 package adb
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"testing"
 )
 
@@ -23,6 +25,23 @@ func (s stubRunner) Run(_ context.Context, name string, args ...string) (string,
 		return out, nil
 	}
 	return "", fmt.Errorf("unexpected command: %s", key)
+}
+
+func (s stubRunner) Start(_ context.Context, name string, args ...string) (io.ReadCloser, <-chan error, error) {
+	key := name
+	for _, arg := range args {
+		key += " " + arg
+	}
+	if err, ok := s.errs[key]; ok {
+		return nil, nil, err
+	}
+	if out, ok := s.outputs[key]; ok {
+		done := make(chan error, 1)
+		done <- nil
+		close(done)
+		return io.NopCloser(bytes.NewBufferString(out)), done, nil
+	}
+	return nil, nil, fmt.Errorf("unexpected command: %s", key)
 }
 
 func TestDetectADBReturnsInstall(t *testing.T) {
@@ -138,5 +157,30 @@ func TestListProcessesReturnsOnlyPackageRelatedRows(t *testing.T) {
 	}
 	if processes[0].PID != 123 || processes[1].Name != "com.demo.host:webview" {
 		t.Fatalf("unexpected related processes: %#v", processes)
+	}
+}
+
+func TestTrackDevicesParsesLengthPrefixedSnapshots(t *testing.T) {
+	runner := stubRunner{
+		outputs: map[string]string{
+			"adb track-devices -l": "0032emulator-5554 device model:Pixel_7 transport_id:1\n",
+		},
+	}
+
+	service := NewService(runner, "")
+	updates, errs, err := service.TrackDevices(context.Background())
+	if err != nil {
+		t.Fatalf("TrackDevices returned error: %v", err)
+	}
+
+	devices := <-updates
+	if len(devices) != 1 {
+		t.Fatalf("expected 1 tracked device, got %d", len(devices))
+	}
+	if devices[0].ID != "emulator-5554" || devices[0].Status != "device" {
+		t.Fatalf("unexpected tracked device: %#v", devices[0])
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("expected no tracking error, got %v", err)
 	}
 }

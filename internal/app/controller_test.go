@@ -936,6 +936,68 @@ func TestControllerSelectDeviceAllowsClearingSelection(t *testing.T) {
 	}
 }
 
+func TestControllerSyncDevicesAutoSelectsFirstReadyDevice(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+				adb.PackageScopeAll: {{Name: "com.demo.host"}},
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.syncDevices(context.Background(), []adb.DeviceInfo{
+		{ID: "device-1", Model: "Pixel_7", Status: "device"},
+	}); err != nil {
+		t.Fatalf("syncDevices returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedDevice != "device-1" {
+		t.Fatalf("expected auto-selected device-1, got %q", model.SelectedDevice)
+	}
+	if len(model.Packages) != 1 || model.Packages[0].Name != "com.demo.host" {
+		t.Fatalf("expected packages refreshed after auto-select, got %#v", model.Packages)
+	}
+}
+
+func TestControllerSyncDevicesClearsUnavailableSelection(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	if err := controller.syncDevices(context.Background(), nil); err != nil {
+		t.Fatalf("syncDevices returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedDevice != "" {
+		t.Fatalf("expected selected device cleared, got %q", model.SelectedDevice)
+	}
+	if len(model.Packages) != 0 {
+		t.Fatalf("expected packages cleared, got %#v", model.Packages)
+	}
+	if len(model.BoundPIDs) != 0 {
+		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)
+	}
+}
+
 func TestControllerSelectPackageAllowsClearingSelection(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{

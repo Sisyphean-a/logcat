@@ -36,8 +36,9 @@ type ProcessInfo struct {
 }
 
 type Service struct {
-	runner  Runner
-	adbPath string
+	runner     Runner
+	pipeRunner PipeRunner
+	adbPath    string
 }
 
 func NewService(runner Runner, adbPath string) Service {
@@ -45,8 +46,14 @@ func NewService(runner Runner, adbPath string) Service {
 		adbPath = "adb"
 	}
 
+	var pipeRunner PipeRunner
+	if candidate, ok := runner.(PipeRunner); ok {
+		pipeRunner = candidate
+	}
+
 	return Service{
-		runner:  runner,
-		adbPath: adbPath,
+		runner:     runner,
+		pipeRunner: pipeRunner,
+		adbPath:    adbPath,
 	}
 }
