@@ -16,6 +16,7 @@ type LogEntry struct {
 	TID       int
 	Level     string
 	Tag       string
+	Source    string
 	Message   string
 	Raw       string
 }
@@ -30,6 +31,7 @@ func ParseThreadtimeLine(deviceID, line string) (LogEntry, error) {
 		return LogEntry{}, fmt.Errorf("invalid threadtime line: %s", line)
 	}
 
+	message, source := parseChromiumConsoleMessage(match[6])
 	return LogEntry{
 		DeviceID:  deviceID,
 		Timestamp: parseTimestamp(match[1]),
@@ -38,7 +40,8 @@ func ParseThreadtimeLine(deviceID, line string) (LogEntry, error) {
 		TID:       mustAtoi(match[3]),
 		Level:     match[4],
 		Tag:       strings.TrimSpace(match[5]),
-		Message:   match[6],
+		Source:    source,
+		Message:   message,
 		Raw:       line,
 	}, nil
 }
@@ -56,4 +59,28 @@ func parseTimestamp(value string) time.Time {
 	}
 
 	return parsed
+}
+
+func parseChromiumConsoleMessage(value string) (string, string) {
+	const sourcePrefix = `", source: `
+	if !strings.Contains(value, sourcePrefix) {
+		return value, ""
+	}
+
+	start := strings.Index(value, `"`)
+	end := strings.LastIndex(value, sourcePrefix)
+	if start == -1 || end == -1 || end <= start {
+		return value, ""
+	}
+
+	message := value[start+1 : end]
+	source := strings.TrimSuffix(value[end+len(sourcePrefix):], ")")
+	if index := strings.LastIndex(source, " ("); index != -1 {
+		source = source[:index]
+	}
+	source = strings.TrimPrefix(source, "http://127.0.0.1/")
+	source = strings.TrimPrefix(source, "https://127.0.0.1/")
+	source = strings.TrimPrefix(source, "http://localhost/")
+	source = strings.TrimPrefix(source, "https://localhost/")
+	return message, source
 }

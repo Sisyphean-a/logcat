@@ -30,14 +30,14 @@ func (c *Controller) ResumeKeep() {
 	}
 
 	for _, entry := range c.pauseBuffer {
-		c.appendVisibleLocked(entry)
+		c.appendLogLocked(entry)
 	}
 
 	c.pauseBuffer = nil
 	c.model.Pause.Active = false
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0
-	c.recomputeSearchLocked()
+	c.rebuildVisibleFromAllLogsLocked()
 	c.model.Status = "running"
 }
 
@@ -60,6 +60,8 @@ func (c *Controller) ClearVisible() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.allLogs = c.allLogs[:0]
+	c.model.TotalLogs = 0
 	c.model.Logs = c.model.Logs[:0]
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.model.SelectedIndex = -1
@@ -148,17 +150,17 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 		return
 	}
 
-	c.appendVisibleLocked(entry)
-	c.recomputeSearchLocked()
+	c.appendLogLocked(entry)
+	c.rebuildVisibleFromAllLogsLocked()
 }
 
-func (c *Controller) appendVisibleLocked(entry logcat.LogEntry) {
+func (c *Controller) appendLogLocked(entry logcat.LogEntry) {
 	item := LogViewItem{
 		Entry:   entry,
 		Display: formatLogDisplay(entry),
 	}
-	c.model.VisibleLogs = append(c.model.VisibleLogs, item)
-	c.model.Logs = append(c.model.Logs, item.Display)
+	c.allLogs = append(c.allLogs, item)
+	c.model.TotalLogs = len(c.allLogs)
 }
 
 func (c *Controller) recomputeSearchLocked() {
@@ -205,4 +207,20 @@ func (c *Controller) updatePausedStatusLocked() {
 
 func formatLogDisplay(entry logcat.LogEntry) string {
 	return fmt.Sprintf("%s %s %s %s", entry.TimeText, entry.Level, entry.Tag, entry.Message)
+}
+
+func (c *Controller) rebuildVisibleFromAllLogsLocked() {
+	c.model.VisibleLogs = c.model.VisibleLogs[:0]
+	c.model.Logs = c.model.Logs[:0]
+	for _, item := range c.allLogs {
+		if !matchesFilter(item.Entry, c.model.SelectedPackage, c.model.Filter.Applied) {
+			continue
+		}
+		c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+		c.model.Logs = append(c.model.Logs, item.Display)
+	}
+	if c.model.SelectedIndex >= len(c.model.VisibleLogs) {
+		c.model.SelectedIndex = -1
+	}
+	c.recomputeSearchLocked()
 }

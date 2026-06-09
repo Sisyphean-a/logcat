@@ -11,9 +11,25 @@ type DeviceItem struct {
 	Status string
 }
 
+type SavedFilter struct {
+	ID          string
+	Name        string
+	PackageName string
+	Query       string
+}
+
 type LogViewItem struct {
 	Entry   logcat.LogEntry
 	Display string
+}
+
+type FilterState struct {
+	Draft          string
+	Applied        string
+	Error          string
+	ActiveFilterID string
+	Saved          []SavedFilter
+	History        []string
 }
 
 type SearchState struct {
@@ -30,34 +46,60 @@ type PauseState struct {
 
 type Model struct {
 	Status          string
+	ADBStatus       string
 	Devices         []DeviceItem
+	SelectedDevice  string
 	PackageScope    adb.PackageScope
 	Packages        []adb.PackageInfo
 	SelectedPackage string
 	Processes       []adb.ProcessInfo
 	SelectedProcess string
 	BoundPIDs       []int
+	TotalLogs       int
 	Logs            []string
 	VisibleLogs     []LogViewItem
+	Filter          FilterState
 	Search          SearchState
 	Pause           PauseState
 	SelectedIndex   int
 }
 
 func NewModel() Model {
+	defaults := defaultSavedFilters()
+	defaultQuery := defaults[0].Query
 	return Model{
 		Status:          "idle",
+		ADBStatus:       "未连接",
 		Devices:         []DeviceItem{},
+		SelectedDevice:  "",
 		PackageScope:    adb.PackageScopeUser,
 		Packages:        []adb.PackageInfo{},
 		SelectedPackage: "",
 		Processes:       []adb.ProcessInfo{},
 		SelectedProcess: "",
 		BoundPIDs:       []int{},
+		TotalLogs:       0,
 		Logs:            []string{},
 		VisibleLogs:     []LogViewItem{},
+		Filter: FilterState{
+			Draft:          defaultQuery,
+			Applied:        defaultQuery,
+			ActiveFilterID: defaults[0].ID,
+			Saved:          defaults,
+		},
 		Search:          SearchState{MatchIndexes: []int{}, Current: -1},
 		Pause:           PauseState{},
 		SelectedIndex:   -1,
+	}
+}
+
+func defaultSavedFilters() []SavedFilter {
+	return []SavedFilter{
+		{
+			ID:          "builtin-h5",
+			Name:        "H5 日志",
+			PackageName: "",
+			Query:       "tag:chromium & message:[H5]",
+		},
 	}
 }

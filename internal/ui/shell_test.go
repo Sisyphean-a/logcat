@@ -3,6 +3,9 @@ package ui
 import (
 	"context"
 	"image"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,11 +34,7 @@ func (s stubDeviceService) ListDevices(context.Context) ([]adb.DeviceInfo, error
 	return s.devices, nil
 }
 
-func (s stubDeviceService) ListPackages(
-	_ context.Context,
-	_ string,
-	scope adb.PackageScope,
-) ([]adb.PackageInfo, error) {
+func (s stubDeviceService) ListPackages(_ context.Context, _ string, scope adb.PackageScope) ([]adb.PackageInfo, error) {
 	return append([]adb.PackageInfo(nil), s.packagesByScope[scope]...), nil
 }
 
@@ -43,11 +42,7 @@ func (s stubDeviceService) CurrentForegroundPackage(context.Context, string) (st
 	return s.foregroundPackage, nil
 }
 
-func (s stubDeviceService) ListProcesses(
-	_ context.Context,
-	_ string,
-	packageName string,
-) ([]adb.ProcessInfo, error) {
+func (s stubDeviceService) ListProcesses(_ context.Context, _ string, packageName string) ([]adb.ProcessInfo, error) {
 	return append([]adb.ProcessInfo(nil), s.processesByPackage[packageName]...), nil
 }
 
@@ -63,87 +58,295 @@ func (s stubSessionStarter) Start(context.Context, session.Config) (session.Hand
 	return session.NewHandle(s.handle.events), nil
 }
 
-func TestShellHandleActionsDrivesController(t *testing.T) {
+func TestShellHandleActionsSelectsDeviceAndPackage(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+			adb.PackageScopeUser: {
+				{Name: "com.demo.host"},
+			},
+		},
+		processesByPackage: map[string][]adb.ProcessInfo{
+			"com.demo.host": {
+				{PID: 111, Name: "com.demo.host"},
+			},
+		},
+	})
+	shell := newShell(controller)
+
+	model := controller.Model()
+	shell.syncButtons(model)
+	shell.deviceButtons[0].Click()
+	shell.handleActions(testLayoutContext(), model)
+
+	model = controller.Model()
+	shell.syncButtons(model)
+	shell.packageButtons[0].Click()
+	shell.handleActions(testLayoutContext(), model)
+
+	model = controller.Model()
+	if model.SelectedDevice != "emulator-5554" {
+		t.Fatalf("expected selected device updated, got %q", model.SelectedDevice)
+	}
+	if model.SelectedPackage != "com.demo.host" {
+		t.Fatalf("expected selected package updated, got %q", model.SelectedPackage)
+	}
+}
+
+func TestShellHandleActionsSavesCurrentFilter(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+			adb.PackageScopeUser: {
+				{Name: "com.demo.host"},
+			},
+		},
+	})
+	shell := newShell(controller)
+	shell.saveNameEditor.SetText("申请流")
+	shell.filterEditor.SetText("tag:chromium & message:apply")
+	shell.saveFilterButton.Click()
+
+	shell.handleActions(testLayoutContext(), controller.Model())
+	model := controller.Model()
+	if len(model.Filter.Saved) < 2 {
+		t.Fatalf("expected saved filter appended, got %#v", model.Filter.Saved)
+	}
+	if model.Filter.Saved[len(model.Filter.Saved)-1].Name != "申请流" {
+		t.Fatalf("unexpected saved filter tail: %#v", model.Filter.Saved[len(model.Filter.Saved)-1])
+	}
+}
+
+func TestShellHandleActionsSelectsSavedFilter(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+			adb.PackageScopeUser: {
+				{Name: "com.demo.host"},
+				{Name: "com.demo.other"},
+			},
+		},
+		processesByPackage: map[string][]adb.ProcessInfo{
+			"com.demo.host":  {{PID: 111, Name: "com.demo.host"}},
+			"com.demo.other": {{PID: 222, Name: "com.demo.other"}},
+		},
+	})
+	controller.ReplaceSavedFilters([]appstate.SavedFilter{
+		{ID: "builtin-h5", Name: "H5 日志", Query: "tag:chromium & message:[H5]"},
+		{ID: "network", Name: "网络错误", PackageName: "com.demo.other", Query: "level:E & message:网络错误"},
+	})
+	shell := newShell(controller)
+
+	model := controller.Model()
+	shell.syncButtons(model)
+	shell.filterButtons[1].Click()
+	shell.handleActions(testLayoutContext(), model)
+
+	model = controller.Model()
+	if model.Filter.ActiveFilterID != "network" {
+		t.Fatalf("expected active filter updated, got %q", model.Filter.ActiveFilterID)
+	}
+	if model.Filter.Applied != "level:E & message:网络错误" {
+		t.Fatalf("expected applied query updated, got %q", model.Filter.Applied)
+	}
+	if model.SelectedPackage != "com.demo.other" {
+		t.Fatalf("expected saved filter package to bind, got %q", model.SelectedPackage)
+	}
+}
+
+func TestShellHandleActionsAppliesHistoryQuery(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+	})
+	controller.ReplaceFilterHistory([]string{
+		"level:E & message:网络错误",
+		"tag:chromium & message:[H5]",
+	})
+	shell := newShell(controller)
+
+	model := controller.Model()
+	shell.syncButtons(model)
+	shell.historyMenuButton.Click()
+	shell.handleActions(testLayoutContext(), model)
+	model = controller.Model()
+	shell.syncButtons(model)
+	shell.historyButtons[0].Click()
+	shell.handleActions(testLayoutContext(), model)
+
+	model = controller.Model()
+	if model.Filter.Draft != "level:E & message:网络错误" {
+		t.Fatalf("expected draft from history, got %q", model.Filter.Draft)
+	}
+	if model.Filter.Applied != "level:E & message:网络错误" {
+		t.Fatalf("expected applied from history, got %q", model.Filter.Applied)
+	}
+	if len(model.Filter.History) == 0 || model.Filter.History[0] != "level:E & message:网络错误" {
+		t.Fatalf("expected history to stay normalized, got %#v", model.Filter.History)
+	}
+}
+
+func TestShellHandleActionsApplyingCustomQueryClearsActiveFilter(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+	})
+	shell := newShell(controller)
+	shell.filterEditor.SetText("level:E")
+
+	shell.handleActions(testLayoutContext(), controller.Model())
+	if err := controller.ApplyFilterDraft(); err != nil {
+		t.Fatalf("ApplyFilterDraft returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.Filter.ActiveFilterID != "" {
+		t.Fatalf("expected active filter cleared for custom query, got %q", model.Filter.ActiveFilterID)
+	}
+	if len(model.Filter.History) == 0 || model.Filter.History[0] != "level:E" {
+		t.Fatalf("expected custom query recorded in history, got %#v", model.Filter.History)
+	}
+}
+
+func TestShellHandleActionsSelectingPackageClearsMismatchedActiveFilter(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+		},
+		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+			adb.PackageScopeUser: {
+				{Name: "com.demo.host"},
+			},
+		},
+		processesByPackage: map[string][]adb.ProcessInfo{
+			"com.demo.host": {
+				{PID: 111, Name: "com.demo.host"},
+			},
+		},
+	})
+	controller.ReplaceSavedFilters([]appstate.SavedFilter{
+		{ID: "builtin-h5", Name: "H5 日志", Query: "tag:chromium & message:[H5]"},
+		{ID: "network", Name: "网络错误", Query: "level:E", PackageName: "com.demo.other"},
+	})
+	controller.ReplaceFilterHistory([]string{"level:E"})
+	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	shell := newShell(controller)
+
+	shell.filterEditor.SetText("level:E")
+	shell.handleActions(testLayoutContext(), controller.Model())
+	if err := controller.ApplyFilterDraft(); err != nil {
+		t.Fatalf("ApplyFilterDraft returned error: %v", err)
+	}
+
+	model := controller.Model()
+	shell.syncButtons(model)
+	shell.packageButtons[0].Click()
+	shell.handleActions(testLayoutContext(), model)
+
+	model = controller.Model()
+	if model.Filter.ActiveFilterID != "" {
+		t.Fatalf("expected active filter cleared after selecting unmatched package, got %q", model.Filter.ActiveFilterID)
+	}
+}
+
+func TestShellHandleActionsPauseButtonTogglesResumeKeep(t *testing.T) {
 	events := make(chan session.Event, 4)
 	controller := newTestController(t, events)
 	shell := newShell(controller)
 
-	events <- session.Event{Entry: makeEntry("[H5] token one")}
-	events <- session.Event{Entry: makeEntry("[H5] miss")}
-
+	controller.Pause()
+	events <- session.Event{Entry: makeEntry("[H5] buffered")}
 	waitFor(t, func() bool {
-		return len(controller.Model().VisibleLogs) == 2
+		return controller.Model().Pause.BufferedCount == 1
 	})
 
-	shell.searchEditor.SetText("token")
 	shell.pauseButton.Click()
-	shell.nextMatchButton.Click()
 	shell.handleActions(testLayoutContext(), controller.Model())
 
 	model := controller.Model()
-	if !model.Pause.Active {
-		t.Fatal("expected pause state to be active")
+	if model.Pause.Active {
+		t.Fatal("expected pause state cleared after second toolbar click")
 	}
-	if model.Search.Query != "token" {
-		t.Fatalf("expected search query to sync, got %q", model.Search.Query)
-	}
-	if model.Search.Current != 0 {
-		t.Fatalf("expected first match to be selected, got %d", model.Search.Current)
-	}
-	if model.SelectedIndex != 0 {
-		t.Fatalf("expected selected index to follow current match, got %d", model.SelectedIndex)
+	if len(model.VisibleLogs) != 1 {
+		t.Fatalf("expected buffered log flushed on resume, got %d", len(model.VisibleLogs))
 	}
 }
 
-func TestShellHandleActionsSelectsLogRow(t *testing.T) {
+func TestShellHandleActionsExportsVisibleLogs(t *testing.T) {
 	events := make(chan session.Event, 4)
 	controller := newTestController(t, events)
 	shell := newShell(controller)
+	dir := t.TempDir()
+	var exportedPath string
+	shell.exportLogs = func(items []appstate.LogViewItem) (string, error) {
+		if len(items) != 1 {
+			return "", fmt.Errorf("unexpected export count: %d", len(items))
+		}
+		exportedPath = filepath.Join(dir, "logs.tsv")
+		return exportedPath, os.WriteFile(exportedPath, []byte(items[0].Display), 0o644)
+	}
 
-	events <- session.Event{Entry: makeEntry("[H5] first")}
-	events <- session.Event{Entry: makeEntry("[H5] second")}
-
+	events <- session.Event{Entry: makeEntry("[H5] export me")}
 	waitFor(t, func() bool {
-		return len(controller.Model().VisibleLogs) == 2
+		return len(controller.Model().VisibleLogs) == 1
 	})
 
-	model := controller.Model()
-	shell.syncLogButtons(len(model.VisibleLogs))
-	shell.logButtons[1].Click()
-	shell.handleActions(testLayoutContext(), model)
+	shell.exportButton.Click()
+	shell.handleActions(testLayoutContext(), controller.Model())
 
-	if controller.Model().SelectedIndex != 1 {
-		t.Fatalf("expected second log to be selected, got %d", controller.Model().SelectedIndex)
+	if exportedPath == "" {
+		t.Fatal("expected export path recorded")
+	}
+	content, err := os.ReadFile(exportedPath)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if string(content) == "" {
+		t.Fatal("expected export file content")
+	}
+	if controller.Model().Status == "" {
+		t.Fatal("expected status updated after export")
 	}
 }
 
-func TestShellSelectedClipboardTextUsesCurrentSelection(t *testing.T) {
-	shell := newShell(nil)
-	model := appstate.NewModel()
-	model.VisibleLogs = []appstate.LogViewItem{
-		{
-			Display: "06-04 16:42:18.479 I chromium [H5] hello",
-			Entry: logcat.LogEntry{
-				Raw:     "raw line",
-				Message: "[H5] hello",
-			},
+func TestShellHandleActionsTogglesSelectorMenus(t *testing.T) {
+	controller := newControllerWithService(t, stubDeviceService{
+		install: adb.Install{Path: "adb", Version: "1.0.41"},
+		devices: []adb.DeviceInfo{
+			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
 		},
-	}
-	model.SelectedIndex = 0
+	})
+	shell := newShell(controller)
 
-	line, ok := shell.selectedClipboardText(model, copyLine)
-	if !ok || line != "06-04 16:42:18.479 I chromium [H5] hello" {
-		t.Fatalf("expected display line, got %q ok=%v", line, ok)
-	}
-
-	raw, ok := shell.selectedClipboardText(model, copyRaw)
-	if !ok || raw != "raw line" {
-		t.Fatalf("expected raw line, got %q ok=%v", raw, ok)
+	shell.deviceSelectorButton.Click()
+	shell.handleActions(testLayoutContext(), controller.Model())
+	if !shell.deviceMenuOpen {
+		t.Fatal("expected device menu open")
 	}
 
-	message, ok := shell.selectedClipboardText(model, copyMessage)
-	if !ok || message != "[H5] hello" {
-		t.Fatalf("expected message, got %q ok=%v", message, ok)
+	shell.filterSelectorButton.Click()
+	shell.handleActions(testLayoutContext(), controller.Model())
+	if !shell.filterMenuOpen {
+		t.Fatal("expected filter menu open")
+	}
+	if shell.deviceMenuOpen {
+		t.Fatal("expected device menu closed when filter menu opens")
 	}
 }
 
@@ -177,152 +380,30 @@ func TestShellSyncAutoFollowRestoresEndWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestShellProgrammaticSelectionKeepsAutoFollowEnabled(t *testing.T) {
-	shell := newShell(nil)
-	shell.followLogs = true
-
-	model := appstate.NewModel()
-	model.VisibleLogs = []appstate.LogViewItem{
-		{Display: "one"},
-		{Display: "two"},
-	}
-	model.SelectedIndex = 0
-
-	shell.syncSelectedLog(model)
-	shell.syncAutoFollow(len(model.VisibleLogs))
-
-	if !shell.followLogs {
-		t.Fatal("expected auto follow to stay enabled for programmatic selection")
-	}
-	if !shell.logList.ScrollToEnd {
-		t.Fatal("expected scroll-to-end to remain enabled")
-	}
-}
-
-func TestShellHandleActionsTriggersForegroundSelection(t *testing.T) {
-	controller := newControllerWithService(t, stubDeviceService{
-		install: adb.Install{Path: "adb", Version: "1.0.41"},
-		devices: []adb.DeviceInfo{
-			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
-		},
-		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
-			adb.PackageScopeUser: {
-				{Name: "com.demo.host"},
-			},
-		},
-		foregroundPackage: "com.demo.host",
-		processesByPackage: map[string][]adb.ProcessInfo{
-			"com.demo.host": {
-				{PID: 111, Name: "com.demo.host"},
-			},
-		},
-	})
+func TestShellHandleActionsSelectsLogRow(t *testing.T) {
+	events := make(chan session.Event, 4)
+	controller := newTestController(t, events)
 	shell := newShell(controller)
 
-	shell.foregroundButton.Click()
-	shell.handleActions(testLayoutContext(), controller.Model())
+	events <- session.Event{Entry: makeEntry("[H5] first")}
+	events <- session.Event{Entry: makeEntry("[H5] second")}
 
-	model := controller.Model()
-	if model.SelectedPackage != "com.demo.host" {
-		t.Fatalf("expected foreground package selected, got %q", model.SelectedPackage)
-	}
-	if len(model.BoundPIDs) != 1 || model.BoundPIDs[0] != 111 {
-		t.Fatalf("unexpected foreground bound pids: %#v", model.BoundPIDs)
-	}
-}
-
-func TestShellHandleActionsSelectsPackageAndProcess(t *testing.T) {
-	controller := newControllerWithService(t, stubDeviceService{
-		install: adb.Install{Path: "adb", Version: "1.0.41"},
-		devices: []adb.DeviceInfo{
-			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
-		},
-		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
-			adb.PackageScopeUser: {
-				{Name: "com.demo.host"},
-			},
-		},
-		processesByPackage: map[string][]adb.ProcessInfo{
-			"com.demo.host": {
-				{PID: 111, Name: "com.demo.host"},
-				{PID: 222, Name: "com.demo.host:webview"},
-			},
-		},
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 2
 	})
-	shell := newShell(controller)
 
 	model := controller.Model()
-	shell.syncPackageButtons(len(model.Packages))
-	shell.packageButtons[0].Click()
+	shell.syncButtons(model)
+	shell.logButtons[1].Click()
 	shell.handleActions(testLayoutContext(), model)
 
-	model = controller.Model()
-	if model.SelectedPackage != "com.demo.host" {
-		t.Fatalf("expected package selected, got %q", model.SelectedPackage)
-	}
-	if len(model.BoundPIDs) != 2 {
-		t.Fatalf("expected package binding to keep 2 pids, got %#v", model.BoundPIDs)
-	}
-
-	shell.syncProcessButtons(len(model.Processes))
-	shell.processButtons[1].Click()
-	shell.handleActions(testLayoutContext(), model)
-
-	model = controller.Model()
-	if model.SelectedProcess != "com.demo.host:webview" {
-		t.Fatalf("expected process selected, got %q", model.SelectedProcess)
-	}
-	if len(model.BoundPIDs) != 1 || model.BoundPIDs[0] != 222 {
-		t.Fatalf("unexpected narrowed bound pids: %#v", model.BoundPIDs)
-	}
-}
-
-func TestShellHandleActionsSwitchesPackageScope(t *testing.T) {
-	controller := newControllerWithService(t, stubDeviceService{
-		install: adb.Install{Path: "adb", Version: "1.0.41"},
-		devices: []adb.DeviceInfo{
-			{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
-		},
-		packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
-			adb.PackageScopeUser: {
-				{Name: "com.demo.host"},
-			},
-			adb.PackageScopeSystem: {
-				{Name: "com.android.systemui"},
-			},
-		},
-	})
-	shell := newShell(controller)
-
-	shell.scopeSystemButton.Click()
-	shell.handleActions(testLayoutContext(), controller.Model())
-
-	model := controller.Model()
-	if model.PackageScope != adb.PackageScopeSystem {
-		t.Fatalf("expected system scope, got %q", model.PackageScope)
-	}
-	if len(model.Packages) != 1 || model.Packages[0].Name != "com.android.systemui" {
-		t.Fatalf("unexpected system packages: %#v", model.Packages)
-	}
-}
-
-func TestShellSyncPackageButtonsMatchesModelPackages(t *testing.T) {
-	shell := newShell(nil)
-
-	shell.syncPackageButtons(2)
-	if len(shell.packageButtons) != 2 {
-		t.Fatalf("expected 2 package buttons, got %d", len(shell.packageButtons))
-	}
-
-	shell.syncPackageButtons(1)
-	if len(shell.packageButtons) != 1 {
-		t.Fatalf("expected package buttons to shrink to 1, got %d", len(shell.packageButtons))
+	if controller.Model().SelectedIndex != 1 {
+		t.Fatalf("expected second log selected, got %d", controller.Model().SelectedIndex)
 	}
 }
 
 func newTestController(t *testing.T, events chan session.Event) *appstate.Controller {
 	t.Helper()
-
 	controller := appstate.NewController(
 		stubDeviceService{
 			install: adb.Install{Path: "adb", Version: "1.0.41"},
@@ -346,16 +427,11 @@ func newTestController(t *testing.T, events chan session.Event) *appstate.Contro
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
-
 	return controller
 }
 
-func newControllerWithService(
-	t *testing.T,
-	service stubDeviceService,
-) *appstate.Controller {
+func newControllerWithService(t *testing.T, service stubDeviceService) *appstate.Controller {
 	t.Helper()
-
 	events := make(chan session.Event)
 	close(events)
 	controller := appstate.NewController(
@@ -368,10 +444,6 @@ func newControllerWithService(
 	if err := controller.Load(context.Background()); err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
-		t.Fatalf("SelectDevice returned error: %v", err)
-	}
-
 	return controller
 }
 
@@ -396,7 +468,6 @@ func testLayoutContext() layout.Context {
 
 func waitFor(t *testing.T, check func() bool) {
 	t.Helper()
-
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if check() {
@@ -404,6 +475,5 @@ func waitFor(t *testing.T, check func() bool) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
 	t.Fatal("condition not met before timeout")
 }

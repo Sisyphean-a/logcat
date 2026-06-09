@@ -18,6 +18,12 @@ func TestParseThreadtimeLineParsesChromiumConsole(t *testing.T) {
 	if entry.Level != "I" {
 		t.Fatalf("expected level I, got %q", entry.Level)
 	}
+	if entry.Message != "[H5] connected" {
+		t.Fatalf("expected normalized message, got %q", entry.Message)
+	}
+	if entry.Source != "app.js" {
+		t.Fatalf("expected source app.js, got %q", entry.Source)
+	}
 	if !MatchesH5Preset(entry) {
 		t.Fatalf("expected entry to match H5 preset")
 	}

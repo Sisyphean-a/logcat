@@ -10,6 +10,7 @@ import (
 	"github.com/xiakn/logcat/internal/adb"
 	appstate "github.com/xiakn/logcat/internal/app"
 	"github.com/xiakn/logcat/internal/session"
+	"github.com/xiakn/logcat/internal/storage"
 	"github.com/xiakn/logcat/internal/ui"
 )
 
@@ -26,6 +27,14 @@ func main() {
 		source := adb.NewLogcatSource(runner, "")
 		supervisor := session.NewSupervisor(source)
 		controller := appstate.NewController(deviceService, supervisor)
+		if state, err := storage.LoadFilterState(); err == nil {
+			if len(state.Filters) > 0 {
+				controller.ReplaceSavedFilters(state.Filters)
+			}
+			if len(state.History) > 0 {
+				controller.ReplaceFilterHistory(state.History)
+			}
+		}
 
 		if err := ui.Run(window, controller); err != nil {
 			log.Fatal(err)

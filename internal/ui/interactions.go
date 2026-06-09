@@ -2,23 +2,14 @@ package ui
 
 import (
 	"context"
-	"io"
+	"fmt"
+	"path/filepath"
 	"strings"
 
-	"gioui.org/io/clipboard"
 	"gioui.org/layout"
 	"gioui.org/widget"
 
-	"github.com/xiakn/logcat/internal/adb"
 	appstate "github.com/xiakn/logcat/internal/app"
-)
-
-type copyMode uint8
-
-const (
-	copyLine copyMode = iota
-	copyRaw
-	copyMessage
 )
 
 func (s *Shell) handleActions(gtx layout.Context, model appstate.Model) {
@@ -26,122 +17,158 @@ func (s *Shell) handleActions(gtx layout.Context, model appstate.Model) {
 		return
 	}
 
-	s.syncBindingButtons(model)
+	s.handleSelectorToggles(gtx)
 	s.handleDeviceClicks(gtx, model)
-	model = s.controller.Model()
-	s.syncBindingButtons(model)
-	s.handleScopeClicks(gtx)
-	s.handleForegroundClicks(gtx)
-	model = s.controller.Model()
-	s.syncBindingButtons(model)
 	s.handlePackageClicks(gtx, model)
-	model = s.controller.Model()
-	s.syncBindingButtons(model)
-	s.handleProcessClicks(gtx, model)
-	model = s.controller.Model()
-	s.syncBindingButtons(model)
-	s.handleSearchUpdate(model)
-	model = s.controller.Model()
-	s.syncBindingButtons(model)
-	s.handlePauseClicks(gtx, model)
-	s.handleSearchNavClicks(gtx)
+	s.handleFilterClicks(gtx, model)
+	s.handleHistoryClicks(gtx, model)
+	s.handleFilterDraft(gtx, model)
+	s.handleToolbarClicks(gtx, model)
 	s.handleLogClicks(gtx, model)
-	s.handleCopyClicks(gtx)
 }
 
-func (s *Shell) syncBindingButtons(model appstate.Model) {
-	s.syncDeviceButtons(len(model.Devices))
-	s.syncPackageButtons(len(model.Packages))
-	s.syncProcessButtons(len(model.Processes))
-	s.syncLogButtons(len(model.VisibleLogs))
+func (s *Shell) handleSelectorToggles(gtx layout.Context) {
+	for s.deviceSelectorButton.Clicked(gtx) {
+		s.deviceMenuOpen = !s.deviceMenuOpen
+		s.filterMenuOpen = false
+		s.packageMenuOpen = false
+		s.historyMenuOpen = false
+	}
+	for s.filterSelectorButton.Clicked(gtx) {
+		s.filterMenuOpen = !s.filterMenuOpen
+		s.deviceMenuOpen = false
+		s.packageMenuOpen = false
+		s.historyMenuOpen = false
+	}
+	for s.packageSelectorButton.Clicked(gtx) {
+		s.packageMenuOpen = !s.packageMenuOpen
+		s.deviceMenuOpen = false
+		s.filterMenuOpen = false
+		s.historyMenuOpen = false
+	}
+	for s.historyMenuButton.Clicked(gtx) {
+		s.historyMenuOpen = !s.historyMenuOpen
+		s.deviceMenuOpen = false
+		s.filterMenuOpen = false
+		s.packageMenuOpen = false
+	}
 }
 
 func (s *Shell) handleDeviceClicks(gtx layout.Context, model appstate.Model) {
 	for index := range model.Devices {
+		if index >= len(s.deviceButtons) {
+			break
+		}
 		for s.deviceButtons[index].Clicked(gtx) {
 			_ = s.controller.SelectDevice(context.Background(), model.Devices[index].ID)
+			s.deviceMenuOpen = false
 		}
-	}
-}
-
-func (s *Shell) handleScopeClicks(gtx layout.Context) {
-	for s.scopeUserButton.Clicked(gtx) {
-		_ = s.controller.SetPackageScope(context.Background(), adb.PackageScopeUser)
-	}
-	for s.scopeSystemButton.Clicked(gtx) {
-		_ = s.controller.SetPackageScope(context.Background(), adb.PackageScopeSystem)
-	}
-	for s.scopeAllButton.Clicked(gtx) {
-		_ = s.controller.SetPackageScope(context.Background(), adb.PackageScopeAll)
-	}
-}
-
-func (s *Shell) handleForegroundClicks(gtx layout.Context) {
-	for s.foregroundButton.Clicked(gtx) {
-		_ = s.controller.SelectForegroundPackage(context.Background())
 	}
 }
 
 func (s *Shell) handlePackageClicks(gtx layout.Context, model appstate.Model) {
 	for index := range model.Packages {
+		if index >= len(s.packageButtons) {
+			break
+		}
 		for s.packageButtons[index].Clicked(gtx) {
 			_ = s.controller.SelectPackage(context.Background(), model.Packages[index].Name)
+			s.packageMenuOpen = false
+		}
+	}
+	for s.packageRootButton.Clicked(gtx) {
+		if model.SelectedDevice != "" {
+			_ = s.controller.SelectDevice(context.Background(), model.SelectedDevice)
+		}
+		s.packageMenuOpen = false
+	}
+}
+
+func (s *Shell) handleFilterClicks(gtx layout.Context, model appstate.Model) {
+	for index := range model.Filter.Saved {
+		if index >= len(s.filterButtons) {
+			break
+		}
+		for s.filterButtons[index].Clicked(gtx) {
+			if err := s.controller.ApplySavedFilter(context.Background(), model.Filter.Saved[index].ID); err == nil {
+				s.persistFilters()
+			}
+			s.filterMenuOpen = false
 		}
 	}
 }
 
-func (s *Shell) handleProcessClicks(gtx layout.Context, model appstate.Model) {
-	for index := range model.Processes {
-		for s.processButtons[index].Clicked(gtx) {
-			_ = s.controller.SelectProcess(context.Background(), model.Processes[index].Name)
+func (s *Shell) handleHistoryClicks(gtx layout.Context, model appstate.Model) {
+	history := visibleHistory(model)
+	for index := range history {
+		if index >= len(s.historyButtons) {
+			break
+		}
+		for s.historyButtons[index].Clicked(gtx) {
+			if err := s.controller.ApplyHistoryQuery(history[index]); err == nil {
+				s.persistFilters()
+			}
+			s.historyMenuOpen = false
 		}
 	}
 }
 
-func (s *Shell) handleSearchUpdate(model appstate.Model) {
-	query := strings.TrimSpace(s.searchEditor.Text())
-	if query == model.Search.Query {
-		return
+func (s *Shell) handleFilterDraft(gtx layout.Context, model appstate.Model) {
+	query := strings.TrimSpace(s.filterEditor.Text())
+	if query != model.Filter.Draft {
+		s.controller.SetFilterDraft(query)
 	}
-	s.controller.SetSearchQuery(query)
+	for {
+		event, ok := s.filterEditor.Update(gtx)
+		if !ok {
+			break
+		}
+		if _, ok := event.(widget.SubmitEvent); ok {
+			if err := s.controller.ApplyFilterDraft(); err == nil {
+				s.persistFilters()
+			}
+		}
+	}
 }
 
-func (s *Shell) handlePauseClicks(gtx layout.Context, model appstate.Model) {
-	if model.Pause.Active {
-		for s.resumeKeepButton.Clicked(gtx) {
+func (s *Shell) handleToolbarClicks(gtx layout.Context, model appstate.Model) {
+	for s.pauseButton.Clicked(gtx) {
+		if model.Pause.Active {
 			s.controller.ResumeKeep()
-		}
-		for s.resumeDropButton.Clicked(gtx) {
-			s.controller.ResumeDiscard()
-		}
-	} else {
-		for s.pauseButton.Clicked(gtx) {
+		} else {
 			s.controller.Pause()
 		}
 	}
-
 	for s.clearButton.Clicked(gtx) {
 		s.controller.ClearVisible()
 	}
+	for s.exportButton.Clicked(gtx) {
+		s.exportVisibleLogs(model)
+	}
 	for s.followButton.Clicked(gtx) {
-		s.followLogs = true
+		s.followLogs = !s.followLogs
 		s.logList.Position.BeforeEnd = false
 	}
-}
-
-func (s *Shell) handleSearchNavClicks(gtx layout.Context) {
-	for s.prevMatchButton.Clicked(gtx) {
-		s.followLogs = false
-		s.controller.PrevMatch()
+	for s.saveFilterButton.Clicked(gtx) {
+		name := strings.TrimSpace(s.saveNameEditor.Text())
+		if name == "" {
+			name = autoFilterName(s.controller.Model())
+		}
+		if err := s.controller.SaveCurrentFilter(name); err == nil {
+			s.persistFilters()
+			s.saveNameEditor.SetText("")
+		}
 	}
-	for s.nextMatchButton.Clicked(gtx) {
-		s.followLogs = false
-		s.controller.NextMatch()
+	for s.toggleDetailButton.Clicked(gtx) {
+		s.detailCollapsed = !s.detailCollapsed
 	}
 }
 
 func (s *Shell) handleLogClicks(gtx layout.Context, model appstate.Model) {
 	for index := range model.VisibleLogs {
+		if index >= len(s.logButtons) {
+			break
+		}
 		for s.logButtons[index].Clicked(gtx) {
 			s.followLogs = false
 			s.controller.SelectLog(index)
@@ -149,41 +176,14 @@ func (s *Shell) handleLogClicks(gtx layout.Context, model appstate.Model) {
 	}
 }
 
-func (s *Shell) handleCopyClicks(gtx layout.Context) {
-	for s.copyLineButton.Clicked(gtx) {
-		s.writeClipboard(gtx, copyLine)
-	}
-	for s.copyRawButton.Clicked(gtx) {
-		s.writeClipboard(gtx, copyRaw)
-	}
-	for s.copyMessageButton.Clicked(gtx) {
-		s.writeClipboard(gtx, copyMessage)
-	}
-}
-
-func (s *Shell) writeClipboard(gtx layout.Context, mode copyMode) {
-	text, ok := s.selectedClipboardText(s.controller.Model(), mode)
-	if !ok {
+func (s *Shell) exportVisibleLogs(model appstate.Model) {
+	path, err := s.exportLogs(model.VisibleLogs)
+	if err != nil {
+		s.controller.SetStatus(err.Error())
 		return
 	}
-	gtx.Execute(clipboard.WriteCmd{
-		Type: "application/text",
-		Data: io.NopCloser(strings.NewReader(text)),
-	})
-}
-
-func (s *Shell) syncLogButtons(count int) {
-	for len(s.logButtons) < count {
-		s.logButtons = append(s.logButtons, widgetClickable())
-	}
-}
-
-func (s *Shell) syncPackageButtons(count int) {
-	s.packageButtons = syncClickables(s.packageButtons, count)
-}
-
-func (s *Shell) syncProcessButtons(count int) {
-	s.processButtons = syncClickables(s.processButtons, count)
+	message := fmt.Sprintf("已导出 %d 条到 Downloads/%s", len(model.VisibleLogs), filepath.Base(path))
+	s.controller.SetStatus(message)
 }
 
 func widgetClickable() widget.Clickable {
@@ -198,22 +198,6 @@ func syncClickables(buttons []widget.Clickable, count int) []widget.Clickable {
 		buttons = append(buttons, widgetClickable())
 	}
 	return buttons
-}
-
-func (s *Shell) selectedClipboardText(model appstate.Model, mode copyMode) (string, bool) {
-	item, ok := s.selectedLogItem(model)
-	if !ok {
-		return "", false
-	}
-
-	switch mode {
-	case copyRaw:
-		return item.Entry.Raw, true
-	case copyMessage:
-		return item.Entry.Message, true
-	default:
-		return item.Display, true
-	}
 }
 
 func (s *Shell) selectedLogItem(model appstate.Model) (appstate.LogViewItem, bool) {
@@ -242,7 +226,6 @@ func (s *Shell) syncSelectedLog(model appstate.Model) {
 	if model.SelectedIndex == s.lastSelected {
 		return
 	}
-
 	s.lastSelected = model.SelectedIndex
 	if s.followLogs {
 		return
@@ -250,6 +233,19 @@ func (s *Shell) syncSelectedLog(model appstate.Model) {
 	if model.SelectedIndex < 0 || model.SelectedIndex >= len(model.VisibleLogs) {
 		return
 	}
-
 	s.logList.ScrollTo(model.SelectedIndex)
+}
+
+func autoFilterName(model appstate.Model) string {
+	if model.SelectedPackage != "" {
+		return model.SelectedPackage
+	}
+	query := strings.TrimSpace(model.Filter.Draft)
+	if query == "" {
+		return "H5 日志"
+	}
+	if len(query) > 24 {
+		return query[:24]
+	}
+	return query
 }

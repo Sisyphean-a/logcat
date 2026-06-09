@@ -29,6 +29,7 @@ type Controller struct {
 
 	mu                  sync.RWMutex
 	model               Model
+	allLogs             []LogViewItem
 	sessionCancel       context.CancelFunc
 	watchCancel         context.CancelFunc
 	pauseBuffer         []logcat.LogEntry
@@ -40,15 +41,16 @@ type Controller struct {
 const defaultBindingPollInterval = 500 * time.Millisecond
 
 func NewController(deviceService DeviceService, sessionStart SessionStarter) *Controller {
-	return &Controller{
-		deviceService:       deviceService,
-		sessionStart:        sessionStart,
-		model:               NewModel(),
-		pauseBuffer:         []logcat.LogEntry{},
-		pauseBufferCap:      defaultPauseBufferCap,
-		bindingPollInterval: defaultBindingPollInterval,
-		binding:             SessionBinding{},
-	}
+		return &Controller{
+			deviceService:       deviceService,
+			sessionStart:        sessionStart,
+			model:               NewModel(),
+			allLogs:             []LogViewItem{},
+			pauseBuffer:         []logcat.LogEntry{},
+			pauseBufferCap:      defaultPauseBufferCap,
+			bindingPollInterval: defaultBindingPollInterval,
+			binding:             SessionBinding{},
+		}
 }
 
 func (c *Controller) Model() Model {
@@ -56,6 +58,10 @@ func (c *Controller) Model() Model {
 	defer c.mu.RUnlock()
 
 	return c.model
+}
+
+func (c *Controller) SetStatus(status string) {
+	c.updateStatus(status)
 }
 
 func (c *Controller) Load(ctx context.Context) error {
@@ -73,7 +79,11 @@ func (c *Controller) Load(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.model.Status = "adb " + install.Version
+	c.model.ADBStatus = "已连接"
 	c.model.Devices = mapDevices(devices)
+	if len(c.model.Devices) > 0 {
+		c.model.SelectedDevice = c.model.Devices[0].ID
+	}
 	c.mu.Unlock()
 
 	return nil
@@ -100,11 +110,13 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 	c.mu.Lock()
 	c.binding = SessionBinding{DeviceID: deviceID}
 	c.model.PackageScope = adb.PackageScopeUser
+	c.model.SelectedDevice = deviceID
 	c.model.Packages = c.model.Packages[:0]
 	c.model.SelectedPackage = ""
 	c.model.Processes = c.model.Processes[:0]
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]
+	c.syncActiveFilterLocked()
 	c.mu.Unlock()
 
 	return c.RefreshPackages(ctx)

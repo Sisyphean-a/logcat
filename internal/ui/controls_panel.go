@@ -1,123 +1,195 @@
 package ui
 
 import (
-	"fmt"
+	"image"
 
 	"gioui.org/layout"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
-	"gioui.org/widget"
 	"gioui.org/widget/material"
 
 	appstate "github.com/xiakn/logcat/internal/app"
 )
 
-func (s *Shell) layoutControls(gtx layout.Context, model appstate.Model) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(
+func (s *Shell) layoutToolbar(gtx layout.Context, model appstate.Model) layout.Dimensions {
+	return barSurface(gtx, s.colors.chromeBar, func(gtx layout.Context) layout.Dimensions {
+		inset := layout.Inset{
+			Top:    unit.Dp(8),
+			Bottom: unit.Dp(8),
+			Left:   unit.Dp(12),
+			Right:  unit.Dp(12),
+		}
+		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(
+				gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutBrand(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutToolbarSeparator(gtx, 20)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutADBStatus(gtx, model)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutToolbarSeparator(gtx, 20)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutDeviceSelector(gtx, model)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutToolbarSeparator(gtx, 20)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutSavedFilterSelector(gtx, model)
+				}),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: gtx.Constraints.Min}
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutToolbarActions(gtx, model)
+				}),
+			)
+		})
+	})
+}
+
+func (s *Shell) layoutFilterBar(gtx layout.Context, model appstate.Model) layout.Dimensions {
+	return barSurface(gtx, s.colors.panelBar, func(gtx layout.Context) layout.Dimensions {
+		inset := layout.Inset{
+			Top:    unit.Dp(6),
+			Bottom: unit.Dp(6),
+			Left:   unit.Dp(8),
+			Right:  unit.Dp(8),
+		}
+		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(
+				gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutPackageSelector(gtx, model)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutSpacerWidth(gtx, 6)
+				}),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return s.layoutFilterEditor(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutSpacerWidth(gtx, 6)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutHistorySelector(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutSpacerWidth(gtx, 6)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutFollowToggle(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layoutSpacerWidth(gtx, 6)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.layoutSaveButton(gtx)
+				}),
+			)
+		})
+	})
+}
+
+func (s *Shell) layoutBrand(gtx layout.Context) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(
 		gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return material.H6(s.theme, "Controls").Layout(gtx)
-			})
+			return tokenBox(gtx, s.colors.accentMuted, s.colors.accentOutline, "H5")
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return s.layoutPrimaryControls(gtx, model)
+			return layoutSpacerWidth(gtx, 8)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return s.layoutSearchControls(gtx, model)
+			label := material.Label(s.theme, unit.Sp(13), "Logcat Viewer")
+			label.Color = s.colors.textPrimary
+			return label.Layout(gtx)
 		}),
 	)
 }
 
-func (s *Shell) layoutPrimaryControls(gtx layout.Context, model appstate.Model) layout.Dimensions {
-	return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal}.Layout(
-			gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return s.layoutPauseGroup(gtx, model)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return material.Button(s.theme, &s.clearButton, "清空视图").Layout(gtx)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					label := "恢复跟随"
-					if s.followLogs {
-						label = "跟随中"
-					}
-					return material.Button(s.theme, &s.followButton, label).Layout(gtx)
-				})
-			}),
-		)
-	})
+func (s *Shell) layoutADBStatus(gtx layout.Context, model appstate.Model) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(
+		gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return paintBox(gtx, s.colors.success, appColor{}, unit.Dp(3), func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(6)), gtx.Dp(unit.Dp(6)))
+				gtx.Constraints.Max = gtx.Constraints.Min
+				return layout.Dimensions{Size: gtx.Constraints.Min}
+			})
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutSpacerWidth(gtx, 6)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			label := material.Label(s.theme, unit.Sp(11), "adb")
+			label.Color = s.colors.textMuted
+			return label.Layout(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutSpacerWidth(gtx, 6)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			label := material.Label(s.theme, unit.Sp(11), model.ADBStatus)
+			label.Color = s.colors.success
+			return label.Layout(gtx)
+		}),
+	)
 }
 
-func (s *Shell) layoutPauseGroup(gtx layout.Context, model appstate.Model) layout.Dimensions {
-	if !model.Pause.Active {
-		return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return material.Button(s.theme, &s.pauseButton, "暂停").Layout(gtx)
-		})
+func (s *Shell) layoutToolbarActions(gtx layout.Context, model appstate.Model) layout.Dimensions {
+	pauseLabel := "pause"
+	pauseColor := s.colors.textMuted
+	if model.Pause.Active {
+		pauseLabel = "play"
+		pauseColor = s.colors.accent
 	}
-
 	return layout.Flex{Axis: layout.Horizontal}.Layout(
 		gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return material.Button(s.theme, &s.resumeKeepButton, "恢复并显示").Layout(gtx)
-			})
+			return iconButton(gtx, s.theme, &s.pauseButton, pauseLabel, pauseColor)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return material.Button(s.theme, &s.resumeDropButton, "恢复并丢弃").Layout(gtx)
-			})
+			return layoutSpacerWidth(gtx, 2)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return iconButton(gtx, s.theme, &s.clearButton, "trash", s.colors.textMuted)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutSpacerWidth(gtx, 2)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return iconButton(gtx, s.theme, &s.exportButton, "download", s.colors.textMuted)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layoutSpacerWidth(gtx, 8)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return iconGlyph(gtx, "settings", s.colors.textMuted)
 		}),
 	)
 }
 
-func (s *Shell) layoutSearchControls(gtx layout.Context, model appstate.Model) layout.Dimensions {
-	return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(
-			gtx,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				return s.layoutSearchEditor(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return material.Button(s.theme, &s.prevMatchButton, "上一条").Layout(gtx)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.UniformInset(unit.Dp(4)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return material.Button(s.theme, &s.nextMatchButton, "下一条").Layout(gtx)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				text := searchSummary(model)
-				return layout.UniformInset(unit.Dp(4)).Layout(gtx, material.Body2(s.theme, text).Layout)
-			}),
-		)
-	})
+func barSurface(gtx layout.Context, fillColor appColor, child layout.Widget) layout.Dimensions {
+	defer paint.ColorOp{Color: fillColor}.Add(gtx.Ops)
+	return child(gtx)
 }
 
-func (s *Shell) layoutSearchEditor(gtx layout.Context) layout.Dimensions {
-	border := widget.Border{
-		Color:        s.theme.Palette.ContrastBg,
-		CornerRadius: unit.Dp(6),
-		Width:        unit.Dp(1),
-	}
-	return border.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			editor := material.Editor(s.theme, &s.searchEditor, "搜索当前视图")
-			return editor.Layout(gtx)
+func layoutToolbarSeparator(gtx layout.Context, heightDp int) layout.Dimensions {
+	return layout.Inset{
+		Left:  unit.Dp(8),
+		Right: unit.Dp(8),
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return paintBox(gtx, appColor{R: 42, G: 42, B: 42, A: 255}, appColor{}, 0, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(1)), gtx.Dp(unit.Dp(heightDp)))
+			gtx.Constraints.Max = gtx.Constraints.Min
+			return layout.Dimensions{Size: gtx.Constraints.Min}
 		})
 	})
-}
-
-func searchSummary(model appstate.Model) string {
-	total := len(model.Search.MatchIndexes)
-	if total == 0 {
-		return "0 / 0"
-	}
-	return fmt.Sprintf("%d / %d", model.Search.Current+1, total)
 }

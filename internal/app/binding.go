@@ -139,6 +139,7 @@ func (c *Controller) updateBoundModelLocked(
 	c.model.Processes = append(c.model.Processes[:0], processes...)
 	c.model.SelectedProcess = processName
 	c.model.BoundPIDs = append(c.model.BoundPIDs[:0], pids...)
+	c.syncActiveFilterLocked()
 }
 
 func (c *Controller) currentDeviceID() (string, error) {
@@ -153,6 +154,8 @@ func (c *Controller) currentDeviceID() (string, error) {
 }
 
 func (c *Controller) clearBindingViewLocked() {
+	c.allLogs = c.allLogs[:0]
+	c.model.TotalLogs = 0
 	c.model.Logs = c.model.Logs[:0]
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.model.SelectedIndex = -1
