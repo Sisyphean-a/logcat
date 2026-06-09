@@ -22,6 +22,7 @@ type stubDeviceService struct {
 	listPackagesFunc   func(adb.PackageScope) ([]adb.PackageInfo, error)
 	foregroundFunc     func() (string, error)
 	listProcessesFunc  func(string) ([]adb.ProcessInfo, error)
+	listDevicesFunc    func() ([]adb.DeviceInfo, error)
 	err                error
 }
 
@@ -30,6 +31,12 @@ func (s stubDeviceService) DetectADB(context.Context) (adb.Install, error) {
 }
 
 func (s stubDeviceService) ListDevices(context.Context) ([]adb.DeviceInfo, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.listDevicesFunc != nil {
+		return s.listDevicesFunc()
+	}
 	return s.devices, s.err
 }
 
@@ -995,6 +1002,40 @@ func TestControllerSyncDevicesClearsUnavailableSelection(t *testing.T) {
 	}
 	if len(model.BoundPIDs) != 0 {
 		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)
+	}
+}
+
+func TestControllerReconcileTrackedDevicesPromotesOfflineDeviceToReadySnapshot(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			listDevicesFunc: func() ([]adb.DeviceInfo, error) {
+				return []adb.DeviceInfo{
+					{ID: "bc82a570", Model: "24122RKC7C", Status: "device"},
+				}, nil
+			},
+		},
+		stubSessionStarter{},
+	)
+	controller.deviceReconcileDelay = 0
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.syncDevices(context.Background(), []adb.DeviceInfo{
+		{ID: "bc82a570", Status: "offline"},
+	}); err != nil {
+		t.Fatalf("syncDevices returned error: %v", err)
+	}
+
+	controller.reconcileTrackedDevices()
+
+	model := controller.Model()
+	if model.SelectedDevice != "bc82a570" {
+		t.Fatalf("expected reconciled selected device, got %q", model.SelectedDevice)
+	}
+	if len(model.Devices) != 1 || model.Devices[0].Status != "device" || model.Devices[0].Model != "24122RKC7C" {
+		t.Fatalf("unexpected reconciled devices: %#v", model.Devices)
 	}
 }
 

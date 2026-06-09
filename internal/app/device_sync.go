@@ -2,9 +2,13 @@ package app
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"github.com/xiakn/logcat/internal/adb"
 )
+
+const trackedDeviceReconcileDelay = 400 * time.Millisecond
 
 func (c *Controller) TrackDevices(ctx context.Context) error {
 	tracker, ok := c.deviceService.(DeviceTracker)
@@ -34,9 +38,11 @@ func (c *Controller) consumeDeviceUpdates(
 			if !ok {
 				return
 			}
+			log.Printf("consumeDeviceUpdates devices=%v", devices)
 			if err := c.syncDevices(context.Background(), devices); err != nil {
 				c.updateStatus(err.Error())
 			}
+			go c.reconcileTrackedDevices()
 		case err, ok := <-errs:
 			if !ok {
 				errs = nil
@@ -46,6 +52,24 @@ func (c *Controller) consumeDeviceUpdates(
 				c.updateStatus(err.Error())
 			}
 		}
+	}
+}
+
+func (c *Controller) reconcileTrackedDevices() {
+	timer := time.NewTimer(c.deviceReconcileDelay)
+	defer timer.Stop()
+
+	<-timer.C
+
+	devices, err := c.deviceService.ListDevices(context.Background())
+	if err != nil {
+		c.updateStatus(err.Error())
+		return
+	}
+
+	log.Printf("reconcileTrackedDevices devices=%v", devices)
+	if err := c.syncDevices(context.Background(), devices); err != nil {
+		c.updateStatus(err.Error())
 	}
 }
 

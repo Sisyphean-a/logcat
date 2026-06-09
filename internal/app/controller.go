@@ -31,35 +31,37 @@ type Controller struct {
 	deviceService DeviceService
 	sessionStart  SessionStarter
 
-	mu                  sync.RWMutex
-	dirtyCh             chan struct{}
-	model               Model
-	allLogs             []LogViewItem
-	revision            uint64
-	sessionCancel       context.CancelFunc
-	watchCancel         context.CancelFunc
-	pauseBuffer         []logcat.LogEntry
-	pauseBufferCap      int
-	bindingPollInterval time.Duration
-	binding             SessionBinding
-	compiledFilter      compiledFilterQuery
+	mu                   sync.RWMutex
+	dirtyCh              chan struct{}
+	model                Model
+	allLogs              []LogViewItem
+	revision             uint64
+	sessionCancel        context.CancelFunc
+	watchCancel          context.CancelFunc
+	pauseBuffer          []logcat.LogEntry
+	pauseBufferCap       int
+	bindingPollInterval  time.Duration
+	deviceReconcileDelay time.Duration
+	binding              SessionBinding
+	compiledFilter       compiledFilterQuery
 }
 
 const defaultBindingPollInterval = 500 * time.Millisecond
 
 func NewController(deviceService DeviceService, sessionStart SessionStarter) *Controller {
 	return &Controller{
-		deviceService:       deviceService,
-		sessionStart:        sessionStart,
-		dirtyCh:             make(chan struct{}, 1),
-		model:               NewModel(),
-		allLogs:             []LogViewItem{},
-		revision:            1,
-		pauseBuffer:         []logcat.LogEntry{},
-		pauseBufferCap:      defaultPauseBufferCap,
-		bindingPollInterval: defaultBindingPollInterval,
-		binding:             SessionBinding{},
-		compiledFilter:      compileFilterQuery(""),
+		deviceService:        deviceService,
+		sessionStart:         sessionStart,
+		dirtyCh:              make(chan struct{}, 1),
+		model:                NewModel(),
+		allLogs:              []LogViewItem{},
+		revision:             1,
+		pauseBuffer:          []logcat.LogEntry{},
+		pauseBufferCap:       defaultPauseBufferCap,
+		bindingPollInterval:  defaultBindingPollInterval,
+		deviceReconcileDelay: trackedDeviceReconcileDelay,
+		binding:              SessionBinding{},
+		compiledFilter:       compileFilterQuery(""),
 	}
 }
 

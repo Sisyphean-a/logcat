@@ -60,7 +60,17 @@ export function useAppController() {
       });
 
     const handler = (next: AppState) => {
-      setState(main.AppState.createFrom(next));
+      const snapshot = main.AppState.createFrom(next);
+      console.debug("state:updated", {
+        selectedDevice: snapshot.selectedDevice,
+        devices: snapshot.devices.map((item) => ({
+          id: item.id,
+          model: item.model,
+          status: item.status,
+        })),
+        filterDraft: snapshot.filter.draft,
+      });
+      setState(snapshot);
     };
 
     EventsOn(stateEventName, handler);

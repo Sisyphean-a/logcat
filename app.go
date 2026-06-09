@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 	"time"
 
@@ -214,13 +215,26 @@ func (a *App) emitStateIfDirty() {
 		return
 	}
 	a.lastEmitRev = snapshot.Revision
-	runtime.EventsEmit(a.ctx, stateEventName, newAppState(snapshot))
+	state := newAppState(snapshot)
+	log.Printf(
+		"emitStateIfDirty selectedDevice=%q devices=%v filterDraft=%q",
+		state.SelectedDevice,
+		state.Devices,
+		state.Filter.Draft,
+	)
+	runtime.EventsEmit(a.ctx, stateEventName, state)
 }
 
 func (a *App) emitAndSnapshot() AppState {
 	snapshot := a.controller.UISnapshot(uiLogWindowSize)
 	a.lastEmitRev = snapshot.Revision
 	state := newAppState(snapshot)
+	log.Printf(
+		"emitAndSnapshot selectedDevice=%q devices=%v filterDraft=%q",
+		state.SelectedDevice,
+		state.Devices,
+		state.Filter.Draft,
+	)
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, stateEventName, state)
 	}
