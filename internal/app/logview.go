@@ -169,16 +169,18 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 	}
 
 	item := c.appendLogLocked(entry)
-	if matchesFilter(item.Entry, c.model.SelectedPackage, c.model.Filter.Applied) {
+	if c.matchesAppliedFilterLocked(item.Entry) {
 		c.appendVisibleLogLocked(item)
 	}
 	c.markDirtyLocked()
 }
 
 func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
+	display := formatLogDisplay(entry)
 	item := LogViewItem{
-		Entry:   entry,
-		Display: formatLogDisplay(entry),
+		Entry:        entry,
+		Display:      display,
+		DisplayLower: strings.ToLower(display),
 	}
 	c.allLogs = append(c.allLogs, item)
 	c.model.TotalLogs = len(c.allLogs)
@@ -194,7 +196,7 @@ func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
 		return
 	}
 
-	if !strings.Contains(strings.ToLower(item.Display), strings.ToLower(query)) {
+	if !strings.Contains(item.DisplayLower, normalizedSearchQuery(query)) {
 		return
 	}
 
@@ -216,9 +218,9 @@ func (c *Controller) recomputeSearchLocked() {
 		return
 	}
 
-	normalizedQuery := strings.ToLower(query)
+	normalizedQuery := normalizedSearchQuery(query)
 	for index, item := range c.model.VisibleLogs {
-		if strings.Contains(strings.ToLower(item.Display), normalizedQuery) {
+		if strings.Contains(item.DisplayLower, normalizedQuery) {
 			c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
 		}
 	}
@@ -254,9 +256,23 @@ func formatLogDisplay(entry logcat.LogEntry) string {
 }
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
-	c.model.VisibleLogs = c.model.VisibleLogs[:0]
+	if c.compiledFilter.matchAll() {
+		c.model.VisibleLogs = append(c.model.VisibleLogs[:0], c.allLogs...)
+		if c.model.SelectedIndex >= len(c.model.VisibleLogs) {
+			c.model.SelectedIndex = -1
+		}
+		c.recomputeSearchLocked()
+		c.markDirtyLocked()
+		return
+	}
+
+	if cap(c.model.VisibleLogs) < len(c.allLogs) {
+		c.model.VisibleLogs = make([]LogViewItem, 0, len(c.allLogs))
+	} else {
+		c.model.VisibleLogs = c.model.VisibleLogs[:0]
+	}
 	for _, item := range c.allLogs {
-		if !matchesFilter(item.Entry, c.model.SelectedPackage, c.model.Filter.Applied) {
+		if !c.matchesAppliedFilterLocked(item.Entry) {
 			continue
 		}
 		c.model.VisibleLogs = append(c.model.VisibleLogs, item)
@@ -266,4 +282,8 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	}
 	c.recomputeSearchLocked()
 	c.markDirtyLocked()
+}
+
+func normalizedSearchQuery(query string) string {
+	return strings.ToLower(strings.TrimSpace(query))
 }

@@ -134,15 +134,15 @@ func (a *App) SelectLog(index int) AppState {
 }
 
 func (a *App) ExportVisibleLogs() (string, error) {
-	model := a.controller.Model()
-	path, err := storage.ExportVisibleLogs(model.VisibleLogs)
+	logs := a.controller.VisibleLogsSnapshot()
+	path, err := storage.ExportVisibleLogs(logs)
 	if err != nil {
 		a.controller.SetStatus(err.Error())
 		a.emitState()
 		return "", err
 	}
 
-	message := fmt.Sprintf("已导出 %d 条到 Downloads/%s", len(model.VisibleLogs), filepath.Base(path))
+	message := fmt.Sprintf("已导出 %d 条到 Downloads/%s", len(logs), filepath.Base(path))
 	a.controller.SetStatus(message)
 	a.emitState()
 	return path, nil
@@ -197,8 +197,8 @@ func (a *App) runAction(action func() error) error {
 }
 
 func (a *App) persistFilters() {
-	model := a.controller.Model()
-	_ = storage.SaveFilterState(model.Filter.Saved, model.Filter.History)
+	filter := a.controller.FilterStateSnapshot()
+	_ = storage.SaveFilterState(filter.Saved, filter.History)
 }
 
 func (a *App) emitState() {

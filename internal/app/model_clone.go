@@ -9,8 +9,7 @@ func cloneModel(model Model) Model {
 	cloned.Processes = append([]adb.ProcessInfo(nil), model.Processes...)
 	cloned.BoundPIDs = append([]int(nil), model.BoundPIDs...)
 	cloned.VisibleLogs = append([]LogViewItem(nil), model.VisibleLogs...)
-	cloned.Filter.Saved = append([]SavedFilter(nil), model.Filter.Saved...)
-	cloned.Filter.History = append([]string(nil), model.Filter.History...)
+	cloned.Filter = cloneFilterState(model.Filter)
 	cloned.Search.MatchIndexes = append([]int(nil), model.Search.MatchIndexes...)
 	return cloned
 }

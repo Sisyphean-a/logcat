@@ -19,8 +19,9 @@ type SavedFilter struct {
 }
 
 type LogViewItem struct {
-	Entry   logcat.LogEntry
-	Display string
+	Entry        logcat.LogEntry
+	Display      string
+	DisplayLower string
 }
 
 type FilterState struct {
@@ -83,8 +84,8 @@ func NewModel() Model {
 			ActiveFilterID: "",
 			Saved:          []SavedFilter{},
 		},
-		Search:          SearchState{MatchIndexes: []int{}, Current: -1},
-		Pause:           PauseState{Active: true},
-		SelectedIndex:   -1,
+		Search:        SearchState{MatchIndexes: []int{}, Current: -1},
+		Pause:         PauseState{Active: true},
+		SelectedIndex: -1,
 	}
 }

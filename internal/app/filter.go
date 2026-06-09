@@ -50,7 +50,7 @@ func (c *Controller) SelectSavedFilter(id string) error {
 
 	c.model.Filter.ActiveFilterID = filter.ID
 	c.model.Filter.Draft = filter.Query
-	c.model.Filter.Applied = filter.Query
+	c.setAppliedFilterLocked(filter.Query)
 	c.model.Filter.Error = ""
 	if filter.PackageName != "" {
 		c.model.SelectedPackage = filter.PackageName
@@ -91,7 +91,7 @@ func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
 	c.mu.Lock()
 	c.model.Filter.ActiveFilterID = filter.ID
 	c.model.Filter.Draft = filter.Query
-	c.model.Filter.Applied = filter.Query
+	c.setAppliedFilterLocked(filter.Query)
 	c.model.Filter.Error = ""
 	if filter.PackageName == "" {
 		c.model.SelectedPackage = ""
@@ -133,7 +133,7 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 	}
 	c.model.Filter.Saved = upsertSavedFilter(c.model.Filter.Saved, saved)
 	c.model.Filter.ActiveFilterID = saved.ID
-	c.model.Filter.Applied = query
+	c.setAppliedFilterLocked(query)
 	c.model.Filter.Draft = query
 	c.model.Filter.Error = ""
 	c.recordFilterHistoryLocked(query)
@@ -148,7 +148,7 @@ func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) er
 		return err
 	}
 
-	c.model.Filter.Applied = query
+	c.setAppliedFilterLocked(query)
 	c.model.Filter.Error = ""
 	c.syncActiveFilterLocked()
 	if recordHistory {
@@ -185,17 +185,7 @@ func validateFilterQuery(query string) error {
 }
 
 func matchesFilter(entry logcat.LogEntry, packageName string, query string) bool {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return true
-	}
-	parts := splitAndTerms(query)
-	for _, part := range parts {
-		if !matchTerm(entry, packageName, part) {
-			return false
-		}
-	}
-	return true
+	return compileFilterQuery(query).matches(entry, packageName)
 }
 
 func splitAndTerms(query string) []string {

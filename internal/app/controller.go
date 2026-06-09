@@ -42,6 +42,7 @@ type Controller struct {
 	pauseBufferCap      int
 	bindingPollInterval time.Duration
 	binding             SessionBinding
+	compiledFilter      compiledFilterQuery
 }
 
 const defaultBindingPollInterval = 500 * time.Millisecond
@@ -58,6 +59,7 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 		pauseBufferCap:      defaultPauseBufferCap,
 		bindingPollInterval: defaultBindingPollInterval,
 		binding:             SessionBinding{},
+		compiledFilter:      compileFilterQuery(""),
 	}
 }
 
@@ -66,6 +68,20 @@ func (c *Controller) Model() Model {
 	defer c.mu.RUnlock()
 
 	return cloneModel(c.model)
+}
+
+func (c *Controller) FilterStateSnapshot() FilterState {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return cloneFilterState(c.model.Filter)
+}
+
+func (c *Controller) VisibleLogsSnapshot() []LogViewItem {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return append([]LogViewItem(nil), c.model.VisibleLogs...)
 }
 
 func (c *Controller) SetStatus(status string) {
