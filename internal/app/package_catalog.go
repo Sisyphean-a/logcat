@@ -12,6 +12,7 @@ func (c *Controller) SetPackageScope(
 ) error {
 	c.mu.Lock()
 	c.model.PackageScope = effectivePackageScope(scope)
+	c.markDirtyLocked()
 	c.mu.Unlock()
 
 	return c.RefreshPackages(ctx)
@@ -36,6 +37,7 @@ func (c *Controller) RefreshPackages(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.model.Packages = append(c.model.Packages[:0], packages...)
+	c.markDirtyLocked()
 	c.mu.Unlock()
 	return nil
 }

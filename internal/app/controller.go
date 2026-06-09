@@ -30,6 +30,7 @@ type Controller struct {
 	mu                  sync.RWMutex
 	model               Model
 	allLogs             []LogViewItem
+	revision            uint64
 	sessionCancel       context.CancelFunc
 	watchCancel         context.CancelFunc
 	pauseBuffer         []logcat.LogEntry
@@ -46,6 +47,7 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 			sessionStart:        sessionStart,
 			model:               NewModel(),
 			allLogs:             []LogViewItem{},
+			revision:            1,
 			pauseBuffer:         []logcat.LogEntry{},
 			pauseBufferCap:      defaultPauseBufferCap,
 			bindingPollInterval: defaultBindingPollInterval,
@@ -84,6 +86,7 @@ func (c *Controller) Load(ctx context.Context) error {
 	if len(c.model.Devices) > 0 {
 		c.model.SelectedDevice = c.model.Devices[0].ID
 	}
+	c.markDirtyLocked()
 	c.mu.Unlock()
 
 	return nil
@@ -108,8 +111,10 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 	}
 
 	c.stopWatcher()
-	if err := c.startSession(ctx, session.Config{DeviceID: deviceID}); err != nil {
-		return err
+	if c.hasActiveSession() {
+		if err := c.startSession(ctx, session.Config{DeviceID: deviceID}); err != nil {
+			return err
+		}
 	}
 
 	c.mu.Lock()
@@ -122,6 +127,7 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]
 	c.syncActiveFilterLocked()
+	c.markDirtyLocked()
 	c.mu.Unlock()
 
 	return c.RefreshPackages(ctx)
@@ -169,6 +175,7 @@ func (c *Controller) updateStatus(status string) {
 	defer c.mu.Unlock()
 
 	c.model.Status = status
+	c.markDirtyLocked()
 }
 
 func mapDevices(devices []adb.DeviceInfo) []DeviceItem {

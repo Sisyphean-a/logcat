@@ -10,6 +10,7 @@ export type SelectOption = {
 type SelectControlProps = {
   className?: string;
   emptyLabel: string;
+  filterable?: boolean;
   leading?: React.ReactNode;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -19,6 +20,7 @@ type SelectControlProps = {
 export function SelectControl({
   className = "",
   emptyLabel,
+  filterable = false,
   leading,
   onChange,
   options,
@@ -27,14 +29,26 @@ export function SelectControl({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerTextRef = useRef<HTMLSpanElement | null>(null);
   const measureTextRef = useRef<HTMLSpanElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [minWidth, setMinWidth] = useState<number>();
+  const [keyword, setKeyword] = useState("");
 
   const selected = useMemo(
     () => options.find((item) => item.value === value),
     [options, value],
   );
   const display = selected?.label || emptyLabel;
+  const filteredOptions = useMemo(() => {
+    if (!filterable) {
+      return options;
+    }
+    const normalized = keyword.trim().toLowerCase();
+    if (!normalized) {
+      return options;
+    }
+    return options.filter((item) => item.label.toLowerCase().includes(normalized));
+  }, [filterable, keyword, options]);
 
   useLayoutEffect(() => {
     const measure = measureTextRef.current;
@@ -49,7 +63,11 @@ export function SelectControl({
 
   useEffect(() => {
     if (!open) {
+      setKeyword("");
       return;
+    }
+    if (filterable) {
+      queueMicrotask(() => inputRef.current?.focus());
     }
 
     function closeOnOutside(event: MouseEvent) {
@@ -119,7 +137,17 @@ export function SelectControl({
 
       {open ? (
         <div className="select-control-menu">
-          {options.map((option) => (
+          {filterable ? (
+            <div className="select-control-search">
+              <input
+                ref={inputRef}
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="输入包名筛选"
+              />
+            </div>
+          ) : null}
+          {filteredOptions.map((option) => (
             <button
               key={option.value}
               className={`select-control-option ${option.value === value ? "active" : ""} ${option.tone === "accent" ? "accent" : ""}`}
@@ -129,6 +157,9 @@ export function SelectControl({
               {option.label}
             </button>
           ))}
+          {filteredOptions.length === 0 ? (
+            <div className="select-control-empty">没有匹配包名</div>
+          ) : null}
         </div>
       ) : null}
     </div>

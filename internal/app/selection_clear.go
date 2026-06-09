@@ -25,12 +25,17 @@ func (c *Controller) clearDeviceSelection() {
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]
 	c.syncActiveFilterLocked()
+	c.markDirtyLocked()
 }
 
 func (c *Controller) clearPackageSelection(ctx context.Context) error {
 	deviceID := c.selectedOrBoundDeviceID()
 	if deviceID == "" {
 		c.clearDevicePackageBinding("")
+		return nil
+	}
+	if !c.hasActiveSession() {
+		c.clearDevicePackageBinding(deviceID)
 		return nil
 	}
 
@@ -49,6 +54,7 @@ func (c *Controller) clearSavedFilterSelection() {
 
 	c.model.Filter.ActiveFilterID = ""
 	c.model.Filter.Error = ""
+	c.markDirtyLocked()
 }
 
 func (c *Controller) selectedOrBoundDeviceID() string {
@@ -67,12 +73,13 @@ func (c *Controller) clearDevicePackageBinding(deviceID string) {
 
 	c.binding = SessionBinding{DeviceID: deviceID}
 	c.clearBindingViewLocked()
-	c.model.Status = "running"
+	c.model.Pause.Active = true
 	c.model.SelectedPackage = ""
 	c.model.Processes = c.model.Processes[:0]
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]
 	c.syncActiveFilterLocked()
+	c.markDirtyLocked()
 }
 
 func effectivePackageScope(scope adb.PackageScope) adb.PackageScope {

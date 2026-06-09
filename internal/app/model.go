@@ -56,7 +56,6 @@ type Model struct {
 	SelectedProcess string
 	BoundPIDs       []int
 	TotalLogs       int
-	Logs            []string
 	VisibleLogs     []LogViewItem
 	Filter          FilterState
 	Search          SearchState
@@ -77,7 +76,6 @@ func NewModel() Model {
 		SelectedProcess: "",
 		BoundPIDs:       []int{},
 		TotalLogs:       0,
-		Logs:            []string{},
 		VisibleLogs:     []LogViewItem{},
 		Filter: FilterState{
 			Draft:          "",
@@ -86,7 +84,7 @@ func NewModel() Model {
 			Saved:          []SavedFilter{},
 		},
 		Search:          SearchState{MatchIndexes: []int{}, Current: -1},
-		Pause:           PauseState{},
+		Pause:           PauseState{Active: true},
 		SelectedIndex:   -1,
 	}
 }

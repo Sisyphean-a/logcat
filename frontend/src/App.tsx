@@ -8,6 +8,8 @@ export default function App() {
     actionError,
     autoFollow,
     detailCollapsed,
+    scrollTop,
+    viewportHeight,
     tableRef,
     setAutoFollow,
     setDetailCollapsed,
@@ -42,6 +44,9 @@ export default function App() {
           <LogTable
             loading={loading}
             logs={state.logs}
+            visibleCount={state.visibleCount}
+            scrollTop={scrollTop}
+            viewportHeight={viewportHeight}
             tableRef={tableRef}
             onScroll={handleScroll}
             onSelectLog={(index) => void api.selectLog(index)}

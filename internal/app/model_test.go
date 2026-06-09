@@ -11,7 +11,10 @@ func TestNewModelStartsIdle(t *testing.T) {
 	if len(model.Devices) != 0 {
 		t.Fatalf("expected empty devices, got %d", len(model.Devices))
 	}
-	if len(model.Logs) != 0 {
-		t.Fatalf("expected empty logs, got %d", len(model.Logs))
+	if len(model.VisibleLogs) != 0 {
+		t.Fatalf("expected empty visible logs, got %d", len(model.VisibleLogs))
+	}
+	if !model.Pause.Active {
+		t.Fatal("expected initial state paused")
 	}
 }

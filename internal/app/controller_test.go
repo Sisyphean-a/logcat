@@ -214,6 +214,7 @@ func TestControllerSelectDeviceAppendsLogEvents(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 
 	waitFor(t, func() bool {
 		return len(controller.Model().VisibleLogs) == 1
@@ -262,6 +263,44 @@ func TestControllerSelectDeviceLoadsUserPackages(t *testing.T) {
 	if model.Packages[0].Name != "com.demo.host" {
 		t.Fatalf("unexpected first package: %#v", model.Packages[0])
 	}
+	if !model.Pause.Active {
+		t.Fatal("expected device selection to stay paused before start")
+	}
+}
+
+func TestControllerSelectDeviceDoesNotStartSessionUntilResume(t *testing.T) {
+	starter := &recordingSessionStarter{}
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+			},
+		},
+		starter,
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+
+	starter.mu.Lock()
+	configCount := len(starter.configs)
+	starter.mu.Unlock()
+	if configCount != 0 {
+		t.Fatalf("expected no session before resume, got %d", configCount)
+	}
+
+	controller.ResumeKeep()
+
+	waitFor(t, func() bool {
+		starter.mu.Lock()
+		defer starter.mu.Unlock()
+		return len(starter.configs) == 1
+	})
 }
 
 func TestControllerRejectsNonReadyDevices(t *testing.T) {
@@ -330,6 +369,7 @@ func TestControllerCancelsPreviousSessionBeforeStartingNext(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
 		t.Fatalf("first SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 	if err := controller.SelectDevice(context.Background(), "device-2"); err != nil {
 		t.Fatalf("second SelectDevice returned error: %v", err)
 	}
@@ -522,6 +562,30 @@ func TestControllerConsumeRecomputesMatchesWhenLogsArrive(t *testing.T) {
 	}
 }
 
+func TestControllerUISnapshotWindowsLargeVisibleLogSet(t *testing.T) {
+	events := make(chan session.Event, 1105)
+	controller := newStreamingController(t, events)
+
+	for index := 0; index < 1105; index++ {
+		events <- session.Event{Entry: makeEntry("row")}
+	}
+
+	waitFor(t, func() bool {
+		return controller.Model().TotalLogs == 1105
+	})
+
+	snapshot := controller.UISnapshot(1000)
+	if snapshot.VisibleCount != 1105 {
+		t.Fatalf("expected full visible count, got %d", snapshot.VisibleCount)
+	}
+	if snapshot.VisibleStart != 105 {
+		t.Fatalf("expected visible window start 105, got %d", snapshot.VisibleStart)
+	}
+	if len(snapshot.Model.VisibleLogs) != 1000 {
+		t.Fatalf("expected 1000 windowed logs, got %d", len(snapshot.Model.VisibleLogs))
+	}
+}
+
 func TestControllerSelectPackageReplacesBindingAndClearsVisibleLogs(t *testing.T) {
 	starter := &recordingSessionStarter{}
 	controller := NewController(
@@ -546,6 +610,7 @@ func TestControllerSelectPackageReplacesBindingAndClearsVisibleLogs(t *testing.T
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 
 	controller.pushEntry(*makeEntry("[H5] before bind"))
 	controller.SetSearchQuery("before")
@@ -614,6 +679,7 @@ func TestControllerSelectProcessNarrowsBindingToSinglePID(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
 		t.Fatalf("SelectPackage returned error: %v", err)
 	}
@@ -710,6 +776,7 @@ func TestControllerSelectForegroundPackageUsesForegroundPackage(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 	if err := controller.SelectForegroundPackage(context.Background()); err != nil {
 		t.Fatalf("SelectForegroundPackage returned error: %v", err)
 	}
@@ -747,6 +814,7 @@ func TestControllerSelectPackageNotRunningStopsOldBinding(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 
 	waitFor(t, func() bool {
 		starter.mu.Lock()
@@ -940,6 +1008,7 @@ func TestControllerRebindsWhenProcessPIDChanges(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
 		t.Fatalf("SelectPackage returned error: %v", err)
 	}
@@ -983,6 +1052,7 @@ func newStreamingController(t *testing.T, events chan session.Event) *Controller
 	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
 
 	return controller
 }

@@ -29,6 +29,8 @@ export function useAppController() {
   const [actionError, setActionError] = useState("");
   const [autoFollow, setAutoFollow] = useState(true);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const tableRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -76,6 +78,14 @@ export function useAppController() {
     node.scrollTop = node.scrollHeight;
   }, [autoFollow, state.logs.length]);
 
+  useEffect(() => {
+    const node = tableRef.current;
+    if (!node) {
+      return;
+    }
+    setViewportHeight(node.clientHeight);
+  }, [state.logs.length]);
+
   const api = useMemo(
     () => (isWailsRuntime() ? {
       selectDevice: (deviceID: string) => withAction(() => SelectDevice(deviceID), setActionError),
@@ -115,6 +125,8 @@ export function useAppController() {
       return;
     }
     const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 8;
+    setScrollTop(node.scrollTop);
+    setViewportHeight(node.clientHeight);
     if (!atBottom && autoFollow) {
       setAutoFollow(false);
     }
@@ -126,6 +138,8 @@ export function useAppController() {
     actionError,
     autoFollow,
     detailCollapsed,
+    scrollTop,
+    viewportHeight,
     tableRef,
     setAutoFollow,
     setDetailCollapsed,
@@ -157,6 +171,7 @@ const emptyState = new main.AppState({
   boundPids: [],
   totalLogs: 0,
   visibleCount: 0,
+  visibleStart: 0,
   filter: {
     draft: "",
     applied: "",
@@ -259,6 +274,7 @@ function createPreviewApi(
       const next = main.AppState.createFrom(state);
       next.logs = [];
       next.visibleCount = 0;
+      next.visibleStart = 0;
       next.selectedIndex = -1;
       next.selectedLog = undefined;
       setState(next);

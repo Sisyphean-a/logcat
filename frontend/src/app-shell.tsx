@@ -107,6 +107,7 @@ export function FilterBar({
       <SelectControl
         className="package-select"
         emptyLabel="全部包名"
+        filterable
         onChange={onSelectPackage}
         options={packageOptions}
         value={state.selectedPackage}
@@ -154,16 +155,30 @@ export function FilterBar({
 export function LogTable({
   loading,
   logs,
+  visibleCount,
+  scrollTop,
+  viewportHeight,
   tableRef,
   onScroll,
   onSelectLog,
 }: {
   loading: boolean;
   logs: LogItemView[];
+  visibleCount: number;
+  scrollTop: number;
+  viewportHeight: number;
   tableRef: React.RefObject<HTMLDivElement>;
   onScroll: () => void;
   onSelectLog: (index: number) => void;
 }) {
+  const rowHeight = 27;
+  const buffer = 20;
+  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
+  const visibleRows = Math.ceil(viewportHeight / rowHeight) + buffer * 2;
+  const end = Math.min(logs.length, start + visibleRows);
+  const topSpacer = start * rowHeight;
+  const bottomSpacer = Math.max(0, (logs.length - end) * rowHeight);
+
   return (
     <div className="table-shell">
       <div className="table-head">
@@ -176,12 +191,14 @@ export function LogTable({
       <div className="table-body" ref={tableRef} onScroll={onScroll}>
         {loading ? (
           <div className="placeholder">正在加载状态…</div>
-        ) : logs.length === 0 ? (
+        ) : visibleCount === 0 ? (
           <div className="placeholder">暂无日志</div>
         ) : (
-          logs.map((log) => (
-            <LogRow key={`${log.index}-${log.raw}`} log={log} onClick={() => onSelectLog(log.index)} />
-          ))
+          <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
+            {logs.slice(start, end).map((log) => (
+              <LogRow key={`${log.index}-${log.raw}`} log={log} onClick={() => onSelectLog(log.index)} />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -219,7 +236,7 @@ export function DetailPanel({
                 <button className="ghost-button" onClick={onCopyMessage}>复制消息</button>
               </div>
               <dl className="detail-grid">
-                <div><dt>时间</dt><dd>{state.selectedLog.timeText}</dd></div>
+                <div><dt>时间</dt><dd>{timeOnly(state.selectedLog.timeText)}</dd></div>
                 <div><dt>级别</dt><dd>{state.selectedLog.level}</dd></div>
                 <div><dt>标签</dt><dd>{state.selectedLog.tag}</dd></div>
                 <div><dt>来源</dt><dd>{state.selectedLog.source || "-"}</dd></div>
@@ -295,11 +312,16 @@ function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void }) {
       ].join(" ")}
       onClick={onClick}
     >
-      <span>{log.timeText}</span>
+      <span>{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${tone}`}>{log.level}</span>
-      <span>{log.tag}</span>
+      <span className="tag-cell">{log.tag}</span>
       <span className="message-cell">{log.message}</span>
       <span className="source-cell">{log.source || "-"}</span>
     </button>
   );
+}
+
+function timeOnly(value: string) {
+  const parts = value.split(" ");
+  return parts.length > 1 ? parts[1] : value;
 }

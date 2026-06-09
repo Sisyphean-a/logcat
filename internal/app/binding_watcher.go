@@ -79,6 +79,10 @@ func (c *Controller) refreshBinding(
 	if !c.shouldRebind(deviceID, packageName, processName, pids) {
 		return
 	}
+	if !c.hasActiveSession() {
+		c.applyWatcherPreparedBinding(deviceID, packageName, processName, processes, pids)
+		return
+	}
 	if len(pids) == 0 {
 		c.applyWatcherStoppedBinding(deviceID, packageName, processName, processes)
 		return
@@ -123,6 +127,30 @@ func (c *Controller) applyWatcherStoppedBinding(
 	c.mu.Unlock()
 
 	c.updateStatus(notRunningError(packageName, processName).Error())
+}
+
+func (c *Controller) applyWatcherPreparedBinding(
+	deviceID string,
+	packageName string,
+	processName string,
+	processes []adb.ProcessInfo,
+	pids []int,
+) {
+	c.mu.Lock()
+	c.binding = SessionBinding{
+		DeviceID:    deviceID,
+		PackageName: packageName,
+		ProcessName: processName,
+		PIDs:        append([]int(nil), pids...),
+	}
+	c.updateBoundModelLocked(packageName, processName, processes, pids)
+	if len(pids) == 0 {
+		c.model.Status = notRunningError(packageName, processName).Error()
+	} else {
+		c.model.Status = ""
+	}
+	c.markDirtyLocked()
+	c.mu.Unlock()
 }
 
 func (c *Controller) applyWatcherRunningBinding(

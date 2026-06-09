@@ -203,6 +203,7 @@ export namespace main {
 	    boundPids: number[];
 	    totalLogs: number;
 	    visibleCount: number;
+	    visibleStart: number;
 	    filter: FilterView;
 	    search: SearchView;
 	    pause: PauseView;
@@ -228,6 +229,7 @@ export namespace main {
 	        this.boundPids = source["boundPids"];
 	        this.totalLogs = source["totalLogs"];
 	        this.visibleCount = source["visibleCount"];
+	        this.visibleStart = source["visibleStart"];
 	        this.filter = this.convertValues(source["filter"], FilterView);
 	        this.search = this.convertValues(source["search"], SearchView);
 	        this.pause = this.convertValues(source["pause"], PauseView);

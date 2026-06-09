@@ -9,6 +9,7 @@ func (c *Controller) ReplaceFilterHistory(history []string) {
 	defer c.mu.Unlock()
 
 	c.model.Filter.History = normalizeFilterHistory(history)
+	c.markDirtyLocked()
 }
 
 func (c *Controller) ApplyHistoryQuery(query string) error {

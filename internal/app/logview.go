@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -19,9 +20,15 @@ func (c *Controller) Pause() {
 
 	c.model.Pause.Active = true
 	c.updatePausedStatusLocked()
+	c.markDirtyLocked()
 }
 
 func (c *Controller) ResumeKeep() {
+	if !c.hasActiveSession() {
+		_ = c.startCurrentSelection(context.Background())
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -39,9 +46,15 @@ func (c *Controller) ResumeKeep() {
 	c.model.Pause.DroppedCount = 0
 	c.rebuildVisibleFromAllLogsLocked()
 	c.model.Status = "running"
+	c.markDirtyLocked()
 }
 
 func (c *Controller) ResumeDiscard() {
+	if !c.hasActiveSession() {
+		_ = c.startCurrentSelection(context.Background())
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -54,6 +67,7 @@ func (c *Controller) ResumeDiscard() {
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0
 	c.model.Status = "running"
+	c.markDirtyLocked()
 }
 
 func (c *Controller) ClearVisible() {
@@ -62,11 +76,11 @@ func (c *Controller) ClearVisible() {
 
 	c.allLogs = c.allLogs[:0]
 	c.model.TotalLogs = 0
-	c.model.Logs = c.model.Logs[:0]
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.model.SelectedIndex = -1
 	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
 	c.model.Search.Current = -1
+	c.markDirtyLocked()
 }
 
 func (c *Controller) SetSearchQuery(query string) {
@@ -75,6 +89,7 @@ func (c *Controller) SetSearchQuery(query string) {
 
 	c.model.Search.Query = query
 	c.recomputeSearchLocked()
+	c.markDirtyLocked()
 }
 
 func (c *Controller) NextMatch() {
@@ -91,6 +106,7 @@ func (c *Controller) NextMatch() {
 		c.model.Search.Current = (c.model.Search.Current + 1) % len(c.model.Search.MatchIndexes)
 	}
 	c.model.SelectedIndex = c.model.Search.MatchIndexes[c.model.Search.Current]
+	c.markDirtyLocked()
 }
 
 func (c *Controller) PrevMatch() {
@@ -110,6 +126,7 @@ func (c *Controller) PrevMatch() {
 		}
 	}
 	c.model.SelectedIndex = c.model.Search.MatchIndexes[c.model.Search.Current]
+	c.markDirtyLocked()
 }
 
 func (c *Controller) SelectLog(index int) {
@@ -122,6 +139,7 @@ func (c *Controller) SelectLog(index int) {
 
 	c.model.SelectedIndex = index
 	c.syncCurrentMatchToSelectionLocked()
+	c.markDirtyLocked()
 }
 
 func (c *Controller) SelectedLog() (LogViewItem, bool) {
@@ -150,17 +168,43 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 		return
 	}
 
-	c.appendLogLocked(entry)
-	c.rebuildVisibleFromAllLogsLocked()
+	item := c.appendLogLocked(entry)
+	if matchesFilter(item.Entry, c.model.SelectedPackage, c.model.Filter.Applied) {
+		c.appendVisibleLogLocked(item)
+	}
+	c.markDirtyLocked()
 }
 
-func (c *Controller) appendLogLocked(entry logcat.LogEntry) {
+func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
 	item := LogViewItem{
 		Entry:   entry,
 		Display: formatLogDisplay(entry),
 	}
 	c.allLogs = append(c.allLogs, item)
 	c.model.TotalLogs = len(c.allLogs)
+	return item
+}
+
+func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
+	index := len(c.model.VisibleLogs)
+	c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+
+	query := strings.TrimSpace(c.model.Search.Query)
+	if query == "" {
+		return
+	}
+
+	if !strings.Contains(strings.ToLower(item.Display), strings.ToLower(query)) {
+		return
+	}
+
+	c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
+	if c.model.Search.Current != -1 {
+		return
+	}
+
+	c.model.Search.Current = 0
+	c.model.SelectedIndex = c.model.Search.MatchIndexes[0]
 }
 
 func (c *Controller) recomputeSearchLocked() {
@@ -211,16 +255,15 @@ func formatLogDisplay(entry logcat.LogEntry) string {
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
-	c.model.Logs = c.model.Logs[:0]
 	for _, item := range c.allLogs {
 		if !matchesFilter(item.Entry, c.model.SelectedPackage, c.model.Filter.Applied) {
 			continue
 		}
 		c.model.VisibleLogs = append(c.model.VisibleLogs, item)
-		c.model.Logs = append(c.model.Logs, item.Display)
 	}
 	if c.model.SelectedIndex >= len(c.model.VisibleLogs) {
 		c.model.SelectedIndex = -1
 	}
 	c.recomputeSearchLocked()
+	c.markDirtyLocked()
 }

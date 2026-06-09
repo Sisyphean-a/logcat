@@ -23,6 +23,7 @@ export function createMockState() {
     boundPids: [2001, 2002],
     totalLogs: 15,
     visibleCount: 13,
+    visibleStart: 0,
     filter: {
       draft: "",
       applied: "",

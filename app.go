@@ -12,10 +12,12 @@ import (
 )
 
 const stateEventName = "state:updated"
+const uiLogWindowSize = 1000
 
 type App struct {
 	ctx        context.Context
 	controller *appstate.Controller
+	lastEmitRev uint64
 }
 
 func NewApp(controller *appstate.Controller) *App {
@@ -29,7 +31,7 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) GetState() AppState {
-	return newAppState(a.controller.Model())
+	return newAppState(a.controller.UISnapshot(uiLogWindowSize))
 }
 
 func (a *App) SelectDevice(deviceID string) error {
@@ -155,7 +157,7 @@ func (a *App) loadInitialState() {
 	if err := a.controller.Load(context.Background()); err == nil {
 		model := a.controller.Model()
 		if len(model.Devices) > 0 && model.SelectedDevice != "" {
-			_ = a.controller.SelectDevice(context.Background(), model.SelectedDevice)
+			_ = a.controller.RefreshPackages(context.Background())
 		}
 	}
 	a.emitState()
@@ -170,7 +172,7 @@ func (a *App) pushStateLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.emitState()
+			a.emitStateIfDirty()
 		}
 	}
 }
@@ -188,14 +190,25 @@ func (a *App) persistFilters() {
 }
 
 func (a *App) emitState() {
+	a.emitStateIfDirty()
+}
+
+func (a *App) emitStateIfDirty() {
 	if a.ctx == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, stateEventName, newAppState(a.controller.Model()))
+	snapshot := a.controller.UISnapshot(uiLogWindowSize)
+	if snapshot.Revision == a.lastEmitRev {
+		return
+	}
+	a.lastEmitRev = snapshot.Revision
+	runtime.EventsEmit(a.ctx, stateEventName, newAppState(snapshot))
 }
 
 func (a *App) emitAndSnapshot() AppState {
-	state := newAppState(a.controller.Model())
+	snapshot := a.controller.UISnapshot(uiLogWindowSize)
+	a.lastEmitRev = snapshot.Revision
+	state := newAppState(snapshot)
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, stateEventName, state)
 	}

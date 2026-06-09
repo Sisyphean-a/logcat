@@ -18,6 +18,7 @@ type AppState struct {
 	BoundPIDs       []int            `json:"boundPids"`
 	TotalLogs       int              `json:"totalLogs"`
 	VisibleCount    int              `json:"visibleCount"`
+	VisibleStart    int              `json:"visibleStart"`
 	Filter          FilterView       `json:"filter"`
 	Search          SearchView       `json:"search"`
 	Pause           PauseView        `json:"pause"`
@@ -94,7 +95,8 @@ type SelectedLogView struct {
 	Display  string `json:"display"`
 }
 
-func newAppState(model appstate.Model) AppState {
+func newAppState(snapshot appstate.UISnapshot) AppState {
+	model := snapshot.Model
 	state := AppState{
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
@@ -107,7 +109,8 @@ func newAppState(model appstate.Model) AppState {
 		SelectedProcess: model.SelectedProcess,
 		BoundPIDs:       append([]int(nil), model.BoundPIDs...),
 		TotalLogs:       model.TotalLogs,
-		VisibleCount:    len(model.VisibleLogs),
+		VisibleCount:    snapshot.VisibleCount,
+		VisibleStart:    snapshot.VisibleStart,
 		SelectedIndex:   model.SelectedIndex,
 		Filter: FilterView{
 			Draft:          model.Filter.Draft,
@@ -168,7 +171,8 @@ func newAppState(model appstate.Model) AppState {
 		})
 	}
 
-	for index, item := range model.VisibleLogs {
+	for offset, item := range model.VisibleLogs {
+		index := snapshot.VisibleStart + offset
 		_, isMatch := matchSet[index]
 		row := LogItemView{
 			Index:      index,

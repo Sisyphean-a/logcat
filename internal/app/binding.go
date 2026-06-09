@@ -31,6 +31,16 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 		c.updateStatus(err.Error())
 		return err
 	}
+	if !c.hasActiveSession() {
+		if len(processes) == 0 {
+			err := c.prepareStoppedBinding(deviceID, packageName, "", nil)
+			c.startBindingWatcher(deviceID, packageName, "")
+			return err
+		}
+		c.prepareBindingSelection(deviceID, packageName, "", processes, collectPIDs(processes))
+		c.startBindingWatcher(deviceID, packageName, "")
+		return nil
+	}
 	if len(processes) == 0 {
 		return c.activateStoppedBinding(deviceID, packageName, "", nil)
 	}
@@ -67,6 +77,17 @@ func (c *Controller) SelectProcess(ctx context.Context, processName string) erro
 	if err != nil {
 		c.updateStatus(err.Error())
 		return err
+	}
+	if !c.hasActiveSession() {
+		c.prepareBindingSelection(
+			deviceID,
+			packageName,
+			process.Name,
+			processes,
+			[]int{process.PID},
+		)
+		c.startBindingWatcher(deviceID, packageName, process.Name)
+		return nil
 	}
 
 	return c.activateRunningBinding(
@@ -144,23 +165,25 @@ func (c *Controller) updateBoundModelLocked(
 	c.model.SelectedProcess = processName
 	c.model.BoundPIDs = append(c.model.BoundPIDs[:0], pids...)
 	c.syncActiveFilterLocked()
+	c.markDirtyLocked()
 }
 
 func (c *Controller) currentDeviceID() (string, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.binding.DeviceID == "" {
+	if c.binding.DeviceID != "" {
+		return c.binding.DeviceID, nil
+	}
+	if c.model.SelectedDevice == "" {
 		return "", fmt.Errorf("device_not_selected")
 	}
-
-	return c.binding.DeviceID, nil
+	return c.model.SelectedDevice, nil
 }
 
 func (c *Controller) clearBindingViewLocked() {
 	c.allLogs = c.allLogs[:0]
 	c.model.TotalLogs = 0
-	c.model.Logs = c.model.Logs[:0]
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.model.SelectedIndex = -1
 	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
@@ -168,6 +191,7 @@ func (c *Controller) clearBindingViewLocked() {
 	c.pauseBuffer = c.pauseBuffer[:0]
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0
+	c.markDirtyLocked()
 }
 
 func collectPIDs(processes []adb.ProcessInfo) []int {

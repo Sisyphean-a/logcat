@@ -13,6 +13,7 @@ func (c *Controller) SetFilterDraft(query string) {
 	defer c.mu.Unlock()
 
 	c.model.Filter.Draft = strings.TrimSpace(query)
+	c.markDirtyLocked()
 }
 
 func (c *Controller) ReplaceSavedFilters(filters []SavedFilter) {
@@ -43,6 +44,7 @@ func (c *Controller) SelectSavedFilter(id string) error {
 	if !ok {
 		err := fmt.Errorf("saved_filter_not_found: %s", id)
 		c.model.Filter.Error = err.Error()
+		c.markDirtyLocked()
 		return err
 	}
 
@@ -112,10 +114,12 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 	if trimmedName == "" {
 		err := fmt.Errorf("saved_filter_name_required")
 		c.model.Filter.Error = err.Error()
+		c.markDirtyLocked()
 		return err
 	}
 	if err := validateFilterQuery(query); err != nil {
 		c.model.Filter.Error = err.Error()
+		c.markDirtyLocked()
 		return err
 	}
 
@@ -140,6 +144,7 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) error {
 	if err := validateFilterQuery(query); err != nil {
 		c.model.Filter.Error = err.Error()
+		c.markDirtyLocked()
 		return err
 	}
 
@@ -257,4 +262,5 @@ func (c *Controller) updateFilterError(message string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.model.Filter.Error = message
+	c.markDirtyLocked()
 }
