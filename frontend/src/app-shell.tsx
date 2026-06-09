@@ -1,9 +1,9 @@
 import { ClearIcon, DetailCollapseIcon, DeviceIcon, DotIcon, DownloadIcon, PauseIcon, PlayIcon, SaveIcon, SearchIcon, SettingsIcon } from "./icons";
 import { main } from "../wailsjs/go/models";
+import { LogRow, timeOnly, type LogItemView } from "./log-row";
 import { SelectControl, type SelectOption } from "./select-control";
 
 export type AppState = main.AppState;
-export type LogItemView = main.LogItemView;
 
 export function Toolbar({
   state,
@@ -298,30 +298,4 @@ export function StatusBar({
       )}
     </footer>
   );
-}
-
-function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void }) {
-  const tone = log.level === "E" || log.level === "F" ? "error" : log.level === "W" ? "warn" : "info";
-  return (
-    <button
-      className={[
-        "table-row",
-        `tone-${tone}`,
-        log.isSelected ? "selected" : "",
-        log.isCurrent ? "current" : "",
-      ].join(" ")}
-      onClick={onClick}
-    >
-      <span>{timeOnly(log.timeText)}</span>
-      <span className={`level-chip ${tone}`}>{log.level}</span>
-      <span className="tag-cell">{log.tag}</span>
-      <span className="message-cell">{log.message}</span>
-      <span className="source-cell">{log.source || "-"}</span>
-    </button>
-  );
-}
-
-function timeOnly(value: string) {
-  const parts = value.split(" ");
-  return parts.length > 1 ? parts[1] : value;
 }

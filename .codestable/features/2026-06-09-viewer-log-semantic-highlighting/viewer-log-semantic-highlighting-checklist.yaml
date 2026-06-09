@@ -1,0 +1,40 @@
+feature: 2026-06-09-viewer-log-semantic-highlighting
+created: 2026-06-09
+
+steps:
+  - action: "按 design 2.5 做前端微重构：提取 LogRow 与语义着色 helper 到独立文件，保持当前行为不变"
+    exit_signal: "app-shell.tsx 只保留布局拼装；LogTable 虚拟滚动逻辑不变；npm run build 通过"
+    status: done
+
+  - action: "接入整行语义色：根据 level 与常见日志类型给行、time、tag、chip 追加更清晰的颜色层次"
+    exit_signal: "I/W/E 与 request/stack/success/noise 的视觉差异稳定可见，且 selected/current 样式未被覆盖"
+    status: done
+
+  - action: "接入 message/source 轻量 token 渲染：仅在可见行对 URL、源码位置、HTTP 方法、错误词、堆栈前缀等做 span 分层"
+    exit_signal: "token 规则原样保留文本内容、单行不换行，mock 和真实日志都能看到差异"
+    status: done
+
+  - action: "补样式变量与预览样例，并完成构建验证"
+    exit_signal: "style.css 的新变量和 token 类齐备，mock-state 覆盖关键场景，frontend 构建通过"
+    status: done
+
+checks:
+  - item: "错误与警告日志在长列表中更容易扫出，但整体暗色稳定度不被破坏"
+    source: 验收场景
+    status: pending
+
+  - item: "HTTP 方法、URL/路径、错误关键词、耗时/次数、源码位置和堆栈前缀能形成稳定色差"
+    source: 名词契约
+    status: pending
+
+  - item: "selected/current/isMatch 仍然比语义着色更醒目"
+    source: 流程级约束
+    status: pending
+
+  - item: "实现没有改动虚拟切片逻辑，也没有在 state.logs 全量预处理 token"
+    source: 性能约束
+    status: pending
+
+  - item: "代码中没有后端 token 字段、真实外链导航、ANSI 解析器或逐字符高亮"
+    source: 反向核对项
+    status: pending

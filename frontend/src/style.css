@@ -19,7 +19,28 @@
   --warn: #f4c54b;
   --error: #ff6467;
   --row: #1c1c1c;
+  --row-info-bg: #1a1c22;
+  --row-request-bg: #171d24;
+  --row-stack-bg: #1d1b22;
+  --row-success-bg: #171f1b;
+  --row-warn-bg: #221d12;
+  --row-error-bg: #241617;
   --row-selected: rgba(43, 127, 255, 0.12);
+  --row-current: rgba(0, 211, 243, 0.1);
+  --row-match: rgba(244, 197, 75, 0.08);
+  --token-badge: #77d1ff;
+  --token-url: #7fc7ff;
+  --token-source: #e8c17a;
+  --token-http: #7ce2b3;
+  --token-path: #c8d2dd;
+  --token-error: #ff8b8d;
+  --token-warn: #f4d97a;
+  --token-success: #8ee6a5;
+  --token-metric: #9fd5ff;
+  --token-stack: #c7a9ff;
+  --time-warn: #d8c073;
+  --time-error: #ff9a9c;
+  --tag-request: #87c6ff;
 }
 
 * {
@@ -553,10 +574,16 @@ svg {
   color: var(--text);
   cursor: pointer;
   position: relative;
+  background: var(--row-info-bg);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .table-row > span {
   min-width: 0;
+}
+
+.table-row:hover {
+  background: #23262d;
 }
 
 .table-row::before {
@@ -570,14 +597,16 @@ svg {
   opacity: 0;
 }
 
-.table-row.selected,
-.table-row.current {
-  background: var(--row-selected);
+.table-row.selected::before,
+.table-row.current::before,
+.table-row.matched::before {
+  opacity: 1;
 }
 
-.table-row.selected::before,
-.table-row.current::before {
-  opacity: 1;
+.table-row.tone-info::before,
+.table-row.tone-success::before,
+.table-row.tone-request::before {
+  background: var(--info);
 }
 
 .table-row.tone-warn::before {
@@ -586,6 +615,46 @@ svg {
 
 .table-row.tone-error::before {
   background: var(--error);
+}
+
+.table-row.tone-stack::before {
+  background: var(--token-stack);
+}
+
+.table-row.tone-info {
+  background: var(--row-info-bg);
+}
+
+.table-row.tone-request {
+  background: var(--row-request-bg);
+}
+
+.table-row.tone-stack {
+  background: var(--row-stack-bg);
+}
+
+.table-row.tone-success {
+  background: var(--row-success-bg);
+}
+
+.table-row.tone-warn {
+  background: var(--row-warn-bg);
+}
+
+.table-row.tone-error {
+  background: var(--row-error-bg);
+}
+
+.table-row.matched {
+  background: var(--row-match);
+}
+
+.table-row.current {
+  background: var(--row-current);
+}
+
+.table-row.selected {
+  background: var(--row-selected);
 }
 
 .message-cell,
@@ -598,6 +667,85 @@ svg {
 
 .tag-cell {
   color: var(--text-secondary);
+}
+
+.time-cell {
+  color: var(--text-muted);
+}
+
+.time-cell.warn {
+  color: var(--time-warn);
+}
+
+.time-cell.error {
+  color: var(--time-error);
+}
+
+.time-cell.muted {
+  color: var(--text-muted);
+}
+
+.tag-tone-default {
+  color: var(--text-secondary);
+}
+
+.tag-tone-warn {
+  color: var(--warn);
+}
+
+.tag-tone-error {
+  color: var(--error);
+}
+
+.tag-tone-request {
+  color: var(--tag-request);
+}
+
+.message-cell,
+.source-cell {
+  color: var(--text);
+}
+
+.token-badge {
+  color: var(--token-badge);
+}
+
+.token-url {
+  color: var(--token-url);
+}
+
+.token-source-ref {
+  color: var(--token-source);
+}
+
+.token-http-method {
+  color: var(--token-http);
+  font-weight: 600;
+}
+
+.token-path {
+  color: var(--token-path);
+}
+
+.token-error-keyword {
+  color: var(--token-error);
+}
+
+.token-warn-keyword {
+  color: var(--token-warn);
+}
+
+.token-success-keyword {
+  color: var(--token-success);
+}
+
+.token-metric {
+  color: var(--token-metric);
+}
+
+.token-stack-prefix,
+.token-stack-frame {
+  color: var(--token-stack);
 }
 
 .level-chip {
@@ -614,6 +762,12 @@ svg {
 .level-chip.info {
   background: #162456;
   color: var(--info);
+}
+
+.level-chip.info,
+.level-chip.warn,
+.level-chip.error {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .level-chip.warn {

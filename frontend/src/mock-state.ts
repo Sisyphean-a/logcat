@@ -21,8 +21,8 @@ export function createMockState() {
     ],
     selectedProcess: "",
     boundPids: [2001, 2002],
-    totalLogs: 15,
-    visibleCount: 13,
+    totalLogs: 16,
+    visibleCount: 16,
     visibleStart: 0,
     filter: {
       draft: "",
@@ -57,6 +57,9 @@ export function createMockState() {
       logRow(10, "16:42:24.100", "I", "chromium", "[H5] 重试请求 /api/apply/submit (attempt 1/3)", "api/request.ts:88"),
       logRow(11, "16:42:25.200", "I", "chromium", "[H5] 提交成功，跳转到结果页 /apply/result?id=TXN_20240101", "views/apply/index.vue:134"),
       logRow(12, "16:42:26.100", "I", "chromium", "[H5] 结果页加载完成，耗时 320ms", "views/result/index.vue:8"),
+      logRow(13, "16:42:27.020", "I", "chromium", "[H5] 打开帮助页 https://example.com/help/apply?from=h5", "router/index.ts:42"),
+      logRow(14, "16:42:28.550", "I", "chromium", "at renderSubmit (views/apply/index.vue:144)", ""),
+      logRow(15, "16:42:29.180", "I", "chromium", "[H5] DELETE /api/apply/draft/42 完成，耗时 188ms", "api/request.ts:151"),
     ],
   });
 }
