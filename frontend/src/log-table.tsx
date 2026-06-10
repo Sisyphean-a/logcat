@@ -27,6 +27,11 @@ const defaultColumnWidths: Record<ColumnKey, number> = {
   tag: 136,
 };
 
+function clampWindowStart(start: number, size: number, visibleRows: number) {
+  const maxStart = Math.max(0, size - visibleRows);
+  return Math.min(start, maxStart);
+}
+
 export function LogTable({
   loading,
   logs,
@@ -50,8 +55,12 @@ export function LogTable({
   );
 
   const buffer = 20;
-  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
   const visibleRows = Math.ceil(viewportHeight / rowHeight) + buffer * 2;
+  const start = clampWindowStart(
+    Math.max(0, Math.floor(scrollTop / rowHeight) - buffer),
+    logs.length,
+    visibleRows,
+  );
   const end = Math.min(logs.length, start + visibleRows);
   const topSpacer = start * rowHeight;
   const bottomSpacer = Math.max(0, (logs.length - end) * rowHeight);
