@@ -1,3 +1,4 @@
+import { useState, type MouseEvent as ReactMouseEvent } from "react";
 import { main } from "../wailsjs/go/models";
 import {
   ClearIcon,
@@ -11,13 +12,16 @@ import {
   SearchIcon,
   SettingsIcon,
 } from "./icons";
-import { timeOnly } from "./log-row";
+import { LogDetailView } from "./log-detail";
+import { timeOnly } from "./log-text";
 import { SelectControl, type SelectOption } from "./select-control";
 
 export type AppState = main.AppState;
 
 type ToolbarProps = {
+  canEditSavedFilter: boolean;
   state: AppState;
+  onEditSavedFilter: () => void;
   onSelectDevice: (deviceID: string) => void;
   onApplySavedFilter: (filterID: string) => void;
   onPauseToggle: () => void;
@@ -52,7 +56,9 @@ type StatusBarProps = {
 };
 
 export function Toolbar({
+  canEditSavedFilter,
   state,
+  onEditSavedFilter,
   onSelectDevice,
   onApplySavedFilter,
   onPauseToggle,
@@ -85,13 +91,23 @@ export function Toolbar({
         value={state.selectedDevice}
       />
       <div className="toolbar-sep" />
-      <SelectControl
-        className="toolbar-filter"
-        emptyLabel="未选择过滤器"
-        onChange={onApplySavedFilter}
-        options={filterOptions}
-        value={state.filter.activeFilterId || ""}
-      />
+      <div className="toolbar-filter-group">
+        <SelectControl
+          className="toolbar-filter"
+          emptyLabel="未选择过滤器"
+          onChange={onApplySavedFilter}
+          options={filterOptions}
+          value={state.filter.activeFilterId || ""}
+        />
+        <button
+          className="ghost-button mini-button"
+          disabled={!canEditSavedFilter}
+          onClick={onEditSavedFilter}
+          type="button"
+        >
+          编辑
+        </button>
+      </div>
       <div className="toolbar-spacer" />
       <div className="toolbar-actions">
         <button className="icon-button" onClick={onPauseToggle} title={state.pause.active ? "恢复" : "暂停"}>
@@ -190,8 +206,45 @@ export function DetailPanel({
   onCopyRaw,
   onCopyMessage,
 }: DetailPanelProps) {
+  const [panelWidth, setPanelWidth] = useState(320);
+
+  function startResize(event: ReactMouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function handleMove(moveEvent: globalThis.MouseEvent) {
+      const nextWidth = startWidth + startX - moveEvent.clientX;
+      setPanelWidth(Math.max(280, Math.min(760, nextWidth)));
+    }
+
+    function handleUp() {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    }
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
+
   return (
-    <aside className={`detail-panel ${collapsed ? "collapsed" : ""}`}>
+    <aside
+      className={`detail-panel ${collapsed ? "collapsed" : ""}`}
+      style={collapsed ? undefined : { minWidth: `${panelWidth}px`, width: `${panelWidth}px` }}
+    >
+      {!collapsed ? (
+        <button
+          className="detail-resize-handle"
+          type="button"
+          onMouseDown={startResize}
+          aria-label="调整详情面板宽度"
+        />
+      ) : null}
       <button className="detail-toggle" onClick={onToggle}>
         <DetailCollapseIcon />
       </button>
@@ -212,12 +265,12 @@ export function DetailPanel({
                 <div><dt>来源</dt><dd>{state.selectedLog.source || "-"}</dd></div>
               </dl>
               <div className="detail-block">
-                <div className="detail-title">消息</div>
-                <pre>{state.selectedLog.message}</pre>
+                <div className="detail-title">消息解析</div>
+                <LogDetailView text={state.selectedLog.message} />
               </div>
               <div className="detail-block">
                 <div className="detail-title">原始日志</div>
-                <pre>{state.selectedLog.raw}</pre>
+                <pre className="detail-rich-text">{state.selectedLog.raw}</pre>
               </div>
             </div>
           ) : (

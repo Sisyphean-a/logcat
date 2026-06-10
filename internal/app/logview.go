@@ -19,6 +19,7 @@ func (c *Controller) Pause() {
 	}
 
 	c.model.Pause.Active = true
+	c.resumeStreaming = false
 	c.updatePausedStatusLocked()
 	c.markDirtyLocked()
 }
@@ -44,6 +45,7 @@ func (c *Controller) ResumeKeep() {
 	c.model.Pause.Active = false
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0
+	c.resumeStreaming = true
 	c.rebuildVisibleFromAllLogsLocked()
 	c.model.Status = "running"
 	c.markDirtyLocked()
@@ -66,6 +68,7 @@ func (c *Controller) ResumeDiscard() {
 	c.model.Pause.Active = false
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0
+	c.resumeStreaming = true
 	c.model.Status = "running"
 	c.markDirtyLocked()
 }
@@ -165,6 +168,7 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 		}
 		c.model.Pause.BufferedCount = len(c.pauseBuffer)
 		c.updatePausedStatusLocked()
+		c.markDirtyLocked()
 		return
 	}
 

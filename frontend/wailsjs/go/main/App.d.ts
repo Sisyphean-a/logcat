@@ -45,3 +45,5 @@ export function SetFilterDraft(arg1:string):Promise<main.AppState>;
 export function SetPackageScope(arg1:string):Promise<void>;
 
 export function SetSearchQuery(arg1:string):Promise<main.AppState>;
+
+export function UpdateSavedFilterDefinition(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;

@@ -128,41 +128,29 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 }
 
 func (c *Controller) SaveFilterDefinition(name string, packageName string, query string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	return c.UpdateSavedFilterDefinition(context.Background(), "", name, packageName, query)
+}
 
-	trimmedName := strings.TrimSpace(name)
-	trimmedPackageName := strings.TrimSpace(packageName)
-	query = strings.TrimSpace(query)
-	if trimmedName == "" {
-		err := fmt.Errorf("saved_filter_name_required")
-		c.model.Filter.Error = err.Error()
-		c.markDirtyLocked()
-		return err
-	}
-	compiled, err := compileFilterQuery(query)
+func (c *Controller) UpdateSavedFilterDefinition(
+	ctx context.Context,
+	existingID string,
+	name string,
+	packageName string,
+	query string,
+) error {
+	saved, err := validatedSavedFilter(name, packageName, query)
 	if err != nil {
-		c.model.Filter.Error = err.Error()
-		c.markDirtyLocked()
+		c.updateFilterError(err.Error())
 		return err
 	}
 
-	id := strings.ToLower(trimmedName)
-	id = strings.ReplaceAll(id, " ", "-")
-	saved := SavedFilter{
-		ID:          id,
-		Name:        trimmedName,
-		PackageName: trimmedPackageName,
-		Query:       query,
-	}
-	c.model.Filter.Saved = upsertSavedFilter(c.model.Filter.Saved, saved)
-	c.model.Filter.ActiveFilterID = saved.ID
-	c.setCompiledFilterLocked(query, compiled)
-	c.model.Filter.Draft = query
+	c.mu.Lock()
+	c.model.Filter.Saved = replaceSavedFilter(c.model.Filter.Saved, existingID, saved)
 	c.model.Filter.Error = ""
-	c.recordFilterHistoryLocked(query)
-	c.rebuildVisibleFromAllLogsLocked()
-	return nil
+	c.markDirtyLocked()
+	c.mu.Unlock()
+
+	return c.ApplySavedFilter(ctx, saved.ID)
 }
 
 func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) error {
@@ -213,6 +201,41 @@ func upsertSavedFilter(filters []SavedFilter, saved SavedFilter) []SavedFilter {
 		}
 	}
 	return append(filters, saved)
+}
+
+func replaceSavedFilter(filters []SavedFilter, existingID string, saved SavedFilter) []SavedFilter {
+	next := filters[:0]
+	for _, filter := range filters {
+		if filter.ID == existingID && existingID != saved.ID {
+			continue
+		}
+		if filter.ID == saved.ID {
+			continue
+		}
+		next = append(next, filter)
+	}
+	return append(next, saved)
+}
+
+func validatedSavedFilter(name string, packageName string, query string) (SavedFilter, error) {
+	trimmedName := strings.TrimSpace(name)
+	trimmedPackageName := strings.TrimSpace(packageName)
+	normalizedQuery := strings.TrimSpace(query)
+	if trimmedName == "" {
+		return SavedFilter{}, fmt.Errorf("saved_filter_name_required")
+	}
+	if _, err := compileFilterQuery(normalizedQuery); err != nil {
+		return SavedFilter{}, err
+	}
+
+	id := strings.ToLower(trimmedName)
+	id = strings.ReplaceAll(id, " ", "-")
+	return SavedFilter{
+		ID:          id,
+		Name:        trimmedName,
+		PackageName: trimmedPackageName,
+		Query:       normalizedQuery,
+	}, nil
 }
 
 func (c *Controller) updateFilterError(message string) {

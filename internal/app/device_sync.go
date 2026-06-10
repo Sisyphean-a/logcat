@@ -85,7 +85,7 @@ func (c *Controller) syncDevices(ctx context.Context, devices []adb.DeviceInfo) 
 		return nil
 	}
 	if selection != previousDevice {
-		return c.SelectDevice(ctx, selection)
+		return c.selectDevice(ctx, selection, true)
 	}
 	return nil
 }
@@ -158,6 +158,7 @@ func (c *Controller) clearUnavailableDeviceSelection() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.rememberCurrentBindingLocked()
 	c.binding = SessionBinding{}
 	c.clearBindingViewLocked()
 	c.model.SelectedDevice = ""

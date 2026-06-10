@@ -43,6 +43,8 @@ type Controller struct {
 	bindingPollInterval  time.Duration
 	deviceReconcileDelay time.Duration
 	binding              SessionBinding
+	resumeBinding        SessionBinding
+	resumeStreaming      bool
 	compiledFilter       compiledFilterQuery
 }
 
@@ -66,6 +68,8 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 		bindingPollInterval:  defaultBindingPollInterval,
 		deviceReconcileDelay: trackedDeviceReconcileDelay,
 		binding:              SessionBinding{},
+		resumeBinding:        SessionBinding{},
+		resumeStreaming:      false,
 		compiledFilter:       compiled,
 	}
 }
@@ -118,6 +122,14 @@ func (c *Controller) Load(ctx context.Context) error {
 }
 
 func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
+	return c.selectDevice(ctx, deviceID, false)
+}
+
+func (c *Controller) selectDevice(
+	ctx context.Context,
+	deviceID string,
+	restoreBinding bool,
+) error {
 	if deviceID == "" {
 		c.clearDeviceSelection()
 		return nil
@@ -135,15 +147,16 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 		return err
 	}
 
-	c.stopWatcher()
-	if c.hasActiveSession() {
-		if err := c.startSession(ctx, session.Config{DeviceID: deviceID}); err != nil {
-			return err
-		}
+	intent := c.currentSessionIntent()
+	pendingBinding := SessionBinding{}
+	if restoreBinding {
+		pendingBinding = c.pendingBindingForDevice(deviceID)
 	}
 
+	c.stopWatcher()
 	c.mu.Lock()
 	c.binding = SessionBinding{DeviceID: deviceID}
+	c.rememberBindingLocked(c.binding)
 	c.model.PackageScope = adb.PackageScopeAll
 	c.model.SelectedDevice = deviceID
 	c.model.Packages = c.model.Packages[:0]
@@ -155,7 +168,29 @@ func (c *Controller) SelectDevice(ctx context.Context, deviceID string) error {
 	c.markDirtyLocked()
 	c.mu.Unlock()
 
-	return c.RefreshPackages(ctx)
+	if err := c.RefreshPackages(ctx); err != nil {
+		return err
+	}
+	if restoreBinding && pendingBinding.PackageName != "" {
+		if err := c.SelectPackage(ctx, pendingBinding.PackageName); err != nil {
+			return err
+		}
+		if pendingBinding.ProcessName != "" {
+			if err := c.SelectProcess(ctx, pendingBinding.ProcessName); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	switch intent {
+	case sessionIntentRunning:
+		return c.startCurrentSelection(ctx)
+	case sessionIntentPaused:
+		return c.startCurrentSelectionWithPause(ctx, true)
+	default:
+		return nil
+	}
 }
 
 func (c *Controller) startSession(ctx context.Context, cfg session.Config) error {

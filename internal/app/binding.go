@@ -31,7 +31,9 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 		c.updateStatus(err.Error())
 		return err
 	}
-	if !c.hasActiveSession() {
+
+	switch c.currentSessionIntent() {
+	case sessionIntentNone:
 		if len(processes) == 0 {
 			err := c.prepareStoppedBinding(deviceID, packageName, "", nil)
 			c.startBindingWatcher(deviceID, packageName, "")
@@ -40,19 +42,33 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 		c.prepareBindingSelection(deviceID, packageName, "", processes, collectPIDs(processes))
 		c.startBindingWatcher(deviceID, packageName, "")
 		return nil
+	case sessionIntentPaused:
+		if len(processes) == 0 {
+			return c.activateStoppedBinding(deviceID, packageName, "", nil, true)
+		}
+		return c.activateRunningBinding(
+			ctx,
+			deviceID,
+			packageName,
+			"",
+			processes,
+			collectPIDs(processes),
+			true,
+		)
+	default:
+		if len(processes) == 0 {
+			return c.activateStoppedBinding(deviceID, packageName, "", nil, false)
+		}
+		return c.activateRunningBinding(
+			ctx,
+			deviceID,
+			packageName,
+			"",
+			processes,
+			collectPIDs(processes),
+			false,
+		)
 	}
-	if len(processes) == 0 {
-		return c.activateStoppedBinding(deviceID, packageName, "", nil)
-	}
-
-	return c.activateRunningBinding(
-		ctx,
-		deviceID,
-		packageName,
-		"",
-		processes,
-		collectPIDs(processes),
-	)
 }
 
 func (c *Controller) SelectProcess(ctx context.Context, processName string) error {
@@ -78,7 +94,8 @@ func (c *Controller) SelectProcess(ctx context.Context, processName string) erro
 		c.updateStatus(err.Error())
 		return err
 	}
-	if !c.hasActiveSession() {
+
+	if c.currentSessionIntent() == sessionIntentNone {
 		c.prepareBindingSelection(
 			deviceID,
 			packageName,
@@ -97,6 +114,7 @@ func (c *Controller) SelectProcess(ctx context.Context, processName string) erro
 		process.Name,
 		processes,
 		[]int{process.PID},
+		c.currentSessionIntent() == sessionIntentPaused,
 	)
 }
 
@@ -107,6 +125,7 @@ func (c *Controller) activateRunningBinding(
 	processName string,
 	processes []adb.ProcessInfo,
 	pids []int,
+	paused bool,
 ) error {
 	c.stopWatcher()
 
@@ -122,7 +141,12 @@ func (c *Controller) activateRunningBinding(
 		PIDs:        append([]int(nil), pids...),
 	}
 	c.clearBindingViewLocked()
+	c.model.Pause.Active = paused
+	c.rememberBindingLocked(c.binding)
 	c.updateBoundModelLocked(packageName, processName, processes, pids)
+	if paused {
+		c.updatePausedStatusLocked()
+	}
 	c.mu.Unlock()
 
 	c.startBindingWatcher(deviceID, packageName, processName)
@@ -134,6 +158,7 @@ func (c *Controller) activateStoppedBinding(
 	packageName string,
 	processName string,
 	processes []adb.ProcessInfo,
+	paused bool,
 ) error {
 	c.stopWatcher()
 	c.stopSession()
@@ -145,6 +170,8 @@ func (c *Controller) activateStoppedBinding(
 		ProcessName: processName,
 	}
 	c.clearBindingViewLocked()
+	c.model.Pause.Active = paused
+	c.rememberBindingLocked(c.binding)
 	c.updateBoundModelLocked(packageName, processName, processes, nil)
 	c.mu.Unlock()
 

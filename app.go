@@ -100,6 +100,12 @@ func (a *App) SaveFilterDefinition(name string, packageName string, query string
 	})
 }
 
+func (a *App) UpdateSavedFilterDefinition(existingID string, name string, packageName string, query string) error {
+	return a.runAction(func() error {
+		return a.controller.UpdateSavedFilterDefinition(context.Background(), existingID, name, packageName, query)
+	})
+}
+
 func (a *App) Pause() AppState {
 	a.controller.Pause()
 	return a.emitAndSnapshot()

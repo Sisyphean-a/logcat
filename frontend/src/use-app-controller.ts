@@ -17,6 +17,7 @@ import {
   SelectPackage,
   SetFilterDraft,
   SetPackageScope,
+  UpdateSavedFilterDefinition,
 } from "../wailsjs/go/main/App";
 import { type SaveFilterDraft } from "./filter-rule-builder";
 
@@ -135,6 +136,12 @@ export function useAppController() {
       saveFilter: async (draft: SaveFilterDraft) => {
         await withAction(
           () => SaveFilterDefinition(draft.name, draft.packageName, draft.query),
+          setActionError,
+        );
+      },
+      updateFilter: async (filterID: string, draft: SaveFilterDraft) => {
+        await withAction(
+          () => UpdateSavedFilterDefinition(filterID, draft.name, draft.packageName, draft.query),
           setActionError,
         );
       },
@@ -263,7 +270,13 @@ function createPreviewApi(
     selectDevice: async (_deviceID: string) => undefined,
     applySavedFilter: async (filterID: string) => {
       const next = main.AppState.createFrom(state);
+      const selected = next.filter.saved.find((filter) => filter.id === filterID);
       next.filter.activeFilterId = filterID;
+      if (selected) {
+        next.filter.draft = selected.query;
+        next.filter.applied = selected.query;
+        next.selectedPackage = selected.packageName;
+      }
       setState(next);
     },
     selectPackage: async (packageName: string) => {
@@ -336,6 +349,25 @@ function createPreviewApi(
         packageName: draft.packageName,
         query: draft.query,
       });
+      setState(next);
+      setError("");
+    },
+    updateFilter: async (filterID: string, draft: SaveFilterDraft) => {
+      const next = main.AppState.createFrom(state);
+      const id = draft.name.trim().toLowerCase().replaceAll(" ", "-");
+      next.filter.draft = draft.query;
+      next.filter.applied = draft.query;
+      next.filter.activeFilterId = id;
+      next.selectedPackage = draft.packageName;
+      next.filter.saved = upsertPreviewFilter(
+        next.filter.saved.filter((filter) => filter.id !== filterID),
+        {
+          id,
+          name: draft.name,
+          packageName: draft.packageName,
+          query: draft.query,
+        },
+      );
       setState(next);
       setError("");
     },

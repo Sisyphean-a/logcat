@@ -147,6 +147,163 @@ function sanitizeRuleValue(value: string) {
   return value.trim().replaceAll("\"", "'");
 }
 
+export function parseFilterQuery(query: string) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return createRuleGroups();
+  }
+
+  const groupQueries = splitFilterQuery(normalizedQuery, "||");
+  const groups = groupQueries.map((groupQuery) => parseGroupQuery(groupQuery.trim()));
+  if (groups.some((group) => group === null)) {
+    return null;
+  }
+  return groups as RuleGroup[];
+}
+
+function parseGroupQuery(query: string) {
+  const normalizedGroup = trimGroupWrapper(query);
+  const terms = splitFilterQuery(normalizedGroup, "&&");
+  if (terms.length === 0) {
+    return null;
+  }
+
+  const conditions = terms.map((term) => parseConditionQuery(term.trim()));
+  if (conditions.some((condition) => condition === null)) {
+    return null;
+  }
+  return {
+    id: nextRuleID("group"),
+    conditions: conditions as RuleCondition[],
+  };
+}
+
+function parseConditionQuery(query: string) {
+  const levelMatch = query.match(/^(-)?level:([A-Z])$/);
+  if (levelMatch) {
+    return createParsedCondition(
+      "level",
+      levelMatch[1] ? "isNot" : "is",
+      levelMatch[2],
+    );
+  }
+
+  const tagMatch = query.match(/^(-)?tag(~?):"([^"]*)"$/);
+  if (tagMatch) {
+    return createParsedCondition(
+      "tag",
+      parseStringOperator(tagMatch[1], tagMatch[2] === "~"),
+      tagMatch[3],
+    );
+  }
+
+  const messageMatch = query.match(/^(-)?message~:"([^"]*)"$/);
+  if (messageMatch) {
+    return createParsedCondition(
+      "message",
+      messageMatch[1] ? "notContains" : "contains",
+      messageMatch[2],
+    );
+  }
+
+  return null;
+}
+
+function splitFilterQuery(query: string, operator: "&&" | "||") {
+  const parts: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let cursor = 0;
+
+  for (let index = 0; index < query.length; index += 1) {
+    const char = query[index];
+    if (char === "\"" && query[index - 1] !== "\\") {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) {
+      continue;
+    }
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")") {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && query.slice(index, index + operator.length) === operator) {
+      parts.push(query.slice(cursor, index).trim());
+      cursor = index + operator.length;
+      index += operator.length - 1;
+    }
+  }
+
+  parts.push(query.slice(cursor).trim());
+  return parts.filter((item) => item.length > 0);
+}
+
+function trimGroupWrapper(query: string) {
+  const trimmed = query.trim();
+  if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
+    return trimmed;
+  }
+  return hasBalancedGroupWrapper(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
+}
+
+function hasBalancedGroupWrapper(query: string) {
+  let depth = 0;
+  let quoted = false;
+
+  for (let index = 0; index < query.length; index += 1) {
+    const char = query[index];
+    if (char === "\"" && query[index - 1] !== "\\") {
+      quoted = !quoted;
+      continue;
+    }
+    if (quoted) {
+      continue;
+    }
+    if (char === "(") {
+      depth += 1;
+    }
+    if (char === ")") {
+      depth -= 1;
+    }
+    if (depth === 0 && index < query.length - 1) {
+      return false;
+    }
+  }
+
+  return depth === 0;
+}
+
+function createParsedCondition(
+  field: RuleField,
+  operator: RuleOperator,
+  value: string,
+): RuleCondition {
+  return {
+    id: nextRuleID("condition"),
+    field,
+    operator,
+    value,
+  };
+}
+
+function parseStringOperator(negated: string | undefined, fuzzy: boolean): RuleOperator {
+  if (!negated && !fuzzy) {
+    return "is";
+  }
+  if (negated && !fuzzy) {
+    return "isNot";
+  }
+  if (!negated && fuzzy) {
+    return "contains";
+  }
+  return "notContains";
+}
+
 function nextRuleID(prefix: string) {
   builderSequence += 1;
   return `${prefix}-${builderSequence}`;

@@ -15,6 +15,8 @@ func (c *Controller) clearDeviceSelection() {
 	defer c.mu.Unlock()
 
 	c.binding = SessionBinding{}
+	c.resumeBinding = SessionBinding{}
+	c.resumeStreaming = false
 	c.clearBindingViewLocked()
 	c.model.Status = "idle"
 	c.model.SelectedDevice = ""
@@ -72,6 +74,7 @@ func (c *Controller) clearDevicePackageBinding(deviceID string) {
 	defer c.mu.Unlock()
 
 	c.binding = SessionBinding{DeviceID: deviceID}
+	c.rememberBindingLocked(c.binding)
 	c.clearBindingViewLocked()
 	c.model.Pause.Active = true
 	c.model.SelectedPackage = ""

@@ -89,3 +89,7 @@ export function SetPackageScope(arg1) {
 export function SetSearchQuery(arg1) {
   return window['go']['main']['App']['SetSearchQuery'](arg1);
 }
+
+export function UpdateSavedFilterDefinition(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateSavedFilterDefinition'](arg1, arg2, arg3, arg4);
+}

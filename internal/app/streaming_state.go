@@ -53,6 +53,7 @@ func (c *Controller) prepareBindingSelection(
 		ProcessName: processName,
 		PIDs:        append([]int(nil), pids...),
 	}
+	c.rememberBindingLocked(c.binding)
 	c.clearBindingViewLocked()
 	c.model.Pause.Active = true
 	c.updateBoundModelLocked(packageName, processName, processes, pids)
@@ -72,6 +73,7 @@ func (c *Controller) prepareStoppedBinding(
 		PackageName: packageName,
 		ProcessName: processName,
 	}
+	c.rememberBindingLocked(c.binding)
 	c.clearBindingViewLocked()
 	c.model.Pause.Active = true
 	c.updateBoundModelLocked(packageName, processName, processes, nil)
@@ -79,6 +81,13 @@ func (c *Controller) prepareStoppedBinding(
 }
 
 func (c *Controller) startCurrentSelection(ctx context.Context) error {
+	return c.startCurrentSelectionWithPause(ctx, false)
+}
+
+func (c *Controller) startCurrentSelectionWithPause(
+	ctx context.Context,
+	paused bool,
+) error {
 	cfg, err := c.currentSessionConfig()
 	if err != nil {
 		c.updateStatus(err.Error())
@@ -89,7 +98,12 @@ func (c *Controller) startCurrentSelection(ctx context.Context) error {
 	}
 
 	c.mu.Lock()
-	c.model.Pause.Active = false
+	c.model.Pause.Active = paused
+	if paused {
+		c.updatePausedStatusLocked()
+	} else {
+		c.resumeStreaming = true
+	}
 	c.markDirtyLocked()
 	c.mu.Unlock()
 	return nil

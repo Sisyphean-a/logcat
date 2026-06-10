@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { DetailPanel, FilterBar, StatusBar, Toolbar } from "./app-shell";
-import { type SaveFilterDraft, suggestFilterName } from "./filter-rule-builder";
+import { suggestFilterName } from "./filter-rule-builder";
 import { LogTable } from "./log-table";
-import { SaveFilterDialog } from "./save-filter-dialog";
+import { type FilterDialogDraft, SaveFilterDialog } from "./save-filter-dialog";
 import { useAppController } from "./use-app-controller";
 
 export default function App() {
+  const [filterDialogMode, setFilterDialogMode] = useState<"create" | "edit">("create");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogBusy, setSaveDialogBusy] = useState(false);
   const [saveDialogError, setSaveDialogError] = useState("");
@@ -23,12 +24,17 @@ export default function App() {
     handleScroll,
     api,
   } = useAppController();
+  const activeFilter = state.filter.saved.find((item) => item.id === state.filter.activeFilterId);
 
-  async function handleSaveFilter(draft: SaveFilterDraft) {
+  async function handleSaveFilter(draft: FilterDialogDraft) {
     setSaveDialogBusy(true);
     setSaveDialogError("");
     try {
-      await api.saveFilter(draft);
+      if (draft.existingID) {
+        await api.updateFilter(draft.existingID, draft);
+      } else {
+        await api.saveFilter(draft);
+      }
       setSaveDialogOpen(false);
     } catch (error) {
       setSaveDialogError(String(error));
@@ -40,7 +46,16 @@ export default function App() {
   return (
     <div className="app-shell">
       <Toolbar
+        canEditSavedFilter={Boolean(activeFilter)}
         state={state}
+        onEditSavedFilter={() => {
+          if (!activeFilter) {
+            return;
+          }
+          setSaveDialogError("");
+          setFilterDialogMode("edit");
+          setSaveDialogOpen(true);
+        }}
         onSelectDevice={(deviceID) => void api.selectDevice(deviceID)}
         onApplySavedFilter={(filterID) => void api.applySavedFilter(filterID)}
         onPauseToggle={() => void api.pauseToggle()}
@@ -60,6 +75,7 @@ export default function App() {
             onToggleFollow={() => setAutoFollow(!autoFollow)}
             onSaveFilter={() => {
               setSaveDialogError("");
+              setFilterDialogMode("create");
               setSaveDialogOpen(true);
             }}
           />
@@ -93,9 +109,13 @@ export default function App() {
       />
       <SaveFilterDialog
         errorMessage={saveDialogError}
-        existingQuery={state.filter.draft}
-        initialName={suggestFilterName(state.selectedPackage, state.filter.draft)}
-        initialPackageName={state.selectedPackage}
+        initialFilterID={filterDialogMode === "edit" ? activeFilter?.id : undefined}
+        initialName={filterDialogMode === "edit"
+          ? activeFilter?.name || suggestFilterName(state.selectedPackage, state.filter.draft)
+          : suggestFilterName(state.selectedPackage, state.filter.draft)}
+        initialPackageName={filterDialogMode === "edit" ? activeFilter?.packageName || "" : state.selectedPackage}
+        initialQuery={filterDialogMode === "edit" ? activeFilter?.query || state.filter.draft : state.filter.draft}
+        mode={filterDialogMode}
         open={saveDialogOpen}
         packageOptions={state.packages.map((pkg) => pkg.name)}
         saving={saveDialogBusy}

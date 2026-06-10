@@ -4,33 +4,38 @@ import {
   createCondition,
   createRuleGroup,
   createRuleGroups,
-  normalizeOperator,
-  operatorOptions,
+  parseFilterQuery,
   type RuleCondition,
-  type RuleField,
   type RuleGroup,
   type SaveFilterDraft,
 } from "./filter-rule-builder";
+import { RuleGroupsEditor } from "./filter-rule-editor";
+
+export type FilterDialogDraft = SaveFilterDraft & {
+  existingID?: string;
+};
 
 type SaveFilterDialogProps = {
   errorMessage: string;
-  existingQuery: string;
+  initialFilterID?: string;
   initialName: string;
   initialPackageName: string;
+  initialQuery: string;
+  mode: "create" | "edit";
   open: boolean;
   packageOptions: string[];
   saving: boolean;
   onClose: () => void;
-  onSubmit: (draft: SaveFilterDraft) => Promise<void>;
+  onSubmit: (draft: FilterDialogDraft) => Promise<void>;
 };
-
-const levelOptions = ["V", "D", "I", "W", "E", "F"];
 
 export function SaveFilterDialog({
   errorMessage,
-  existingQuery,
+  initialFilterID,
   initialName,
   initialPackageName,
+  initialQuery,
+  mode,
   open,
   packageOptions,
   saving,
@@ -47,12 +52,14 @@ export function SaveFilterDialog({
     if (!open) {
       return;
     }
+
+    const parsedGroups = parseFilterQuery(initialQuery);
     setName(initialName);
     setPackageName(initialPackageName);
-    setGroups(createRuleGroups());
-    setQueryOverride("");
+    setGroups(parsedGroups ?? createRuleGroups());
+    setQueryOverride(parsedGroups ? "" : initialQuery.trim());
     setValidationError("");
-  }, [initialName, initialPackageName, open]);
+  }, [initialName, initialPackageName, initialQuery, open]);
 
   useEffect(() => {
     if (!open) {
@@ -94,6 +101,7 @@ export function SaveFilterDialog({
 
     setValidationError("");
     await onSubmit({
+      existingID: mode === "edit" ? initialFilterID : undefined,
       name: trimmedName,
       packageName: trimmedPackage,
       query: trimmedQuery,
@@ -117,7 +125,7 @@ export function SaveFilterDialog({
       <section className="dialog-card">
         <header className="dialog-header">
           <div>
-            <div className="dialog-title">保存过滤器</div>
+            <div className="dialog-title">{mode === "edit" ? "编辑过滤器" : "保存过滤器"}</div>
             <div className="dialog-subtitle">组内全部满足（&&），组间满足任一组（||）。</div>
           </div>
           <button className="ghost-button dialog-close" type="button" onClick={onClose}>
@@ -153,96 +161,82 @@ export function SaveFilterDialog({
           <div className="dialog-field">
             <div className="dialog-field-header">
               <span>筛选规则</span>
-              {existingQuery.trim() && (
+              {initialQuery.trim() ? (
                 <button
                   className="ghost-button mini-button"
                   type="button"
                   onClick={() => {
-                    setQueryOverride(existingQuery.trim());
+                    setQueryOverride(initialQuery.trim());
                     setValidationError("");
                   }}
                 >
-                  沿用当前筛选框
+                  重置为当前规则
                 </button>
-              )}
+              ) : null}
             </div>
 
-            <div className="rule-groups">
-              {groups.map((group, groupIndex) => (
-                <RuleGroupCard
-                  key={group.id}
-                  group={group}
-                  groupIndex={groupIndex}
-                  removable={groups.length > 1}
-                  onAddCondition={() => {
-                    updateGroups((current) => current.map((item) => {
-                      if (item.id !== group.id) {
-                        return item;
-                      }
-                      return {
-                        ...item,
-                        conditions: [...item.conditions, createCondition()],
-                      };
-                    }));
-                  }}
-                  onChangeCondition={(conditionID, patch) => {
-                    updateGroups((current) => current.map((item) => {
-                      if (item.id !== group.id) {
-                        return item;
-                      }
-                      return {
-                        ...item,
-                        conditions: item.conditions.map((condition) => {
-                          if (condition.id !== conditionID) {
-                            return condition;
-                          }
-                          return patchCondition(condition, patch);
-                        }),
-                      };
-                    }));
-                  }}
-                  onDeleteCondition={(conditionID) => {
-                    updateGroups((current) => current.map((item) => {
-                      if (item.id !== group.id || item.conditions.length === 1) {
-                        return item;
-                      }
-                      return {
-                        ...item,
-                        conditions: item.conditions.filter((condition) => condition.id !== conditionID),
-                      };
-                    }));
-                  }}
-                  onDeleteGroup={() => {
-                    updateGroups((current) => current.filter((item) => item.id !== group.id));
-                  }}
-                />
-              ))}
-            </div>
-
-            <button
-              className="text-button secondary"
-              type="button"
-              onClick={() => {
+            <RuleGroupsEditor
+              groups={groups}
+              onAddCondition={(groupID) => {
+                updateGroups((current) => current.map((group) => {
+                  if (group.id !== groupID) {
+                    return group;
+                  }
+                  return {
+                    ...group,
+                    conditions: [...group.conditions, createCondition()],
+                  };
+                }));
+              }}
+              onAddGroup={() => {
                 updateGroups((current) => [...current, createRuleGroup()]);
               }}
-            >
-              新增 OR 条件组
-            </button>
+              onChangeCondition={(groupID, conditionID, patch) => {
+                updateGroups((current) => current.map((group) => {
+                  if (group.id !== groupID) {
+                    return group;
+                  }
+                  return {
+                    ...group,
+                    conditions: group.conditions.map((condition) => {
+                      if (condition.id !== conditionID) {
+                        return condition;
+                      }
+                      return patchCondition(condition, patch);
+                    }),
+                  };
+                }));
+              }}
+              onDeleteCondition={(groupID, conditionID) => {
+                updateGroups((current) => current.map((group) => {
+                  if (group.id !== groupID || group.conditions.length === 1) {
+                    return group;
+                  }
+                  return {
+                    ...group,
+                    conditions: group.conditions.filter((condition) => condition.id !== conditionID),
+                  };
+                }));
+              }}
+              onDeleteGroup={(groupID) => {
+                updateGroups((current) => current.filter((group) => group.id !== groupID));
+              }}
+            />
           </div>
 
           <label className="dialog-field">
-            <span>规则预览</span>
+            <span>规则预览 / 手工编辑</span>
             <textarea
               className="dialog-preview"
-              readOnly
               value={previewQuery}
-              placeholder="规则会自动生成到这里，并在保存后写回顶部筛选输入框"
+              onChange={(event) => setQueryOverride(event.target.value)}
+              placeholder="规则会自动生成到这里，也可以手工补充或覆盖。"
             />
           </label>
 
-          {(validationError || errorMessage) && (
+          {validationError || errorMessage ? (
             <div className="dialog-error">{validationError || errorMessage}</div>
-          )}
+          ) : null}
         </div>
 
         <footer className="dialog-footer">
@@ -250,7 +244,7 @@ export function SaveFilterDialog({
             关闭
           </button>
           <button className="text-button primary" type="button" onClick={() => void handleSubmit()} disabled={saving}>
-            {saving ? "保存中…" : "写入并保存"}
+            {saving ? "保存中…" : mode === "edit" ? "更新过滤器" : "写入并保存"}
           </button>
         </footer>
       </section>
@@ -258,149 +252,9 @@ export function SaveFilterDialog({
   );
 }
 
-type RuleGroupCardProps = {
-  group: RuleGroup;
-  groupIndex: number;
-  removable: boolean;
-  onAddCondition: () => void;
-  onChangeCondition: (conditionID: string, patch: Partial<RuleCondition>) => void;
-  onDeleteCondition: (conditionID: string) => void;
-  onDeleteGroup: () => void;
-};
-
-function RuleGroupCard({
-  group,
-  groupIndex,
-  removable,
-  onAddCondition,
-  onChangeCondition,
-  onDeleteCondition,
-  onDeleteGroup,
-}: RuleGroupCardProps) {
-  return (
-    <section className="rule-group-card">
-      <header className="rule-group-header">
-        <div className="rule-group-title">
-          {groupIndex === 0 ? "条件组 1" : `或条件组 ${groupIndex + 1}`}
-        </div>
-        {removable && (
-          <button className="ghost-button mini-button" type="button" onClick={onDeleteGroup}>
-            删除组
-          </button>
-        )}
-      </header>
-
-      <div className="rule-group-hint">组内条件全部满足</div>
-
-      <div className="rule-condition-list">
-        {group.conditions.map((condition, conditionIndex) => (
-          <RuleConditionRow
-            key={condition.id}
-            condition={condition}
-            removable={group.conditions.length > 1}
-            showJoin={conditionIndex > 0}
-            onChange={(patch) => onChangeCondition(condition.id, patch)}
-            onDelete={() => onDeleteCondition(condition.id)}
-          />
-        ))}
-      </div>
-
-      <button className="ghost-button mini-button" type="button" onClick={onAddCondition}>
-        添加 AND 条件
-      </button>
-    </section>
-  );
-}
-
-type RuleConditionRowProps = {
-  condition: RuleCondition;
-  removable: boolean;
-  showJoin: boolean;
-  onChange: (patch: Partial<RuleCondition>) => void;
-  onDelete: () => void;
-};
-
-function RuleConditionRow({
-  condition,
-  removable,
-  showJoin,
-  onChange,
-  onDelete,
-}: RuleConditionRowProps) {
-  const operators = operatorOptions(condition.field);
-
-  return (
-    <div className="rule-condition-row">
-      <span className={`rule-join ${showJoin ? "" : "muted"}`}>{showJoin ? "&&" : "起始"}</span>
-      <select
-        className="dialog-select"
-        value={condition.field}
-        onChange={(event) => {
-          const field = event.target.value as RuleField;
-          onChange({
-            field,
-            operator: defaultRuleOperator(field),
-            value: field === "level" ? "I" : "",
-          });
-        }}
-      >
-        <option value="level">等级</option>
-        <option value="tag">标签</option>
-        <option value="message">信息</option>
-      </select>
-
-      <select
-        className="dialog-select"
-        value={condition.operator}
-        onChange={(event) => onChange({
-          operator: normalizeOperator(condition.field, event.target.value as RuleCondition["operator"]),
-        })}
-      >
-        {operators.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-
-      {condition.field === "level" ? (
-        <select
-          className="dialog-select level-select"
-          value={condition.value}
-          onChange={(event) => onChange({ value: event.target.value })}
-        >
-          {levelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-      ) : (
-        <input
-          className="dialog-input rule-value-input"
-          value={condition.value}
-          onChange={(event) => onChange({ value: event.target.value })}
-          placeholder={condition.field === "tag" ? "例如：bridge" : "例如：h5"}
-        />
-      )}
-
-      {removable && (
-        <button className="ghost-button mini-button" type="button" onClick={onDelete}>
-          删除
-        </button>
-      )}
-    </div>
-  );
-}
-
 function patchCondition(condition: RuleCondition, patch: Partial<RuleCondition>) {
-  const nextField = patch.field ?? condition.field;
-  const nextOperator = patch.operator
-    ? normalizeOperator(nextField, patch.operator)
-    : condition.operator;
-
   return {
     ...condition,
     ...patch,
-    field: nextField,
-    operator: nextOperator,
   };
-}
-
-function defaultRuleOperator(field: RuleField) {
-  return operatorOptions(field)[0].value;
 }
