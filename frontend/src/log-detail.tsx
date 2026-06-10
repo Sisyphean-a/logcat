@@ -142,6 +142,14 @@ function JsonPrimitive({ value }: { value: unknown }) {
 }
 
 function buildDetailBlocks(text: string) {
+  const wholeJson = tryParseWholeJson(text);
+  if (wholeJson !== null) {
+    return [{ kind: "json", value: wholeJson } satisfies DetailBlock];
+  }
+  if (looksLikeWholeJson(text)) {
+    return [{ kind: "text", text } satisfies DetailBlock];
+  }
+
   const fragments = findJsonFragments(text);
   const blocks: DetailBlock[] = [];
   let cursor = 0;
@@ -179,6 +187,52 @@ function pushTextBlock(blocks: DetailBlock[], text: string) {
     return;
   }
   blocks.push({ kind: "text", text });
+}
+
+function tryParseWholeJson(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return tryParseJson(trimmed);
+}
+
+function looksLikeWholeJson(text: string) {
+  const trimmedStart = text.trimStart();
+  if (trimmedStart.startsWith("{")) {
+    return true;
+  }
+  if (!trimmedStart.startsWith("[")) {
+    return false;
+  }
+
+  const next = firstNonWhitespace(trimmedStart.slice(1));
+  if (!next) {
+    return false;
+  }
+
+  return next === "]" ||
+    next === "{" ||
+    next === "[" ||
+    next === "\"" ||
+    next === "-" ||
+    isDigit(next) ||
+    next === "t" ||
+    next === "f" ||
+    next === "n";
+}
+
+function firstNonWhitespace(text: string) {
+  for (const char of text) {
+    if (char.trim() !== "") {
+      return char;
+    }
+  }
+  return "";
+}
+
+function isDigit(char: string) {
+  return char >= "0" && char <= "9";
 }
 
 function findJsonFragments(text: string) {

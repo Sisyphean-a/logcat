@@ -1,6 +1,9 @@
 package logcat
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseThreadtimeLineParsesChromiumConsole(t *testing.T) {
 	line := `06-04 16:42:18.479 10665 10665 I chromium: [INFO:CONSOLE(618)] "[H5] connected", source: http://127.0.0.1/app.js (618)`
@@ -51,5 +54,23 @@ func TestParseThreadtimeLineAcceptsTagsWithMultipleColons(t *testing.T) {
 	}
 	if entry.Message != "tempV=31153, highTemperature_state=false" {
 		t.Fatalf("unexpected message: %q", entry.Message)
+	}
+}
+
+func TestParseThreadtimeLinePreservesLongRawLine(t *testing.T) {
+	payload := strings.Repeat("x", 5000)
+	line := `06-10 20:41:45.478 1234 1234 I chromium: [INFO:CONSOLE(1)] "` +
+		payload +
+		`", source: http://127.0.0.1/app.js (1)`
+
+	entry, err := ParseThreadtimeLine("device-1", line)
+	if err != nil {
+		t.Fatalf("ParseThreadtimeLine returned error: %v", err)
+	}
+	if entry.Message != payload {
+		t.Fatalf("expected payload length %d, got %d", len(payload), len(entry.Message))
+	}
+	if entry.Raw != line {
+		t.Fatal("expected raw line to round-trip unchanged")
 	}
 }
