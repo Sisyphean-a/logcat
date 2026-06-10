@@ -3,14 +3,8 @@ import { main } from "../wailsjs/go/models";
 export type LogItemView = main.LogItemView;
 type LogTokenKind =
   | "plain"
-  | "badge"
   | "error-keyword"
-  | "warn-keyword"
-  | "success-keyword"
-  | "http-method"
-  | "path"
   | "url"
-  | "metric"
   | "stack-prefix"
   | "stack-frame";
 
@@ -20,21 +14,14 @@ type LogTextToken = {
 };
 
 const messagePatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
-  { kind: "badge", regex: /\[H5\]/g },
   { kind: "url", regex: /https?:\/\/[^\s)]+/g },
-  { kind: "http-method", regex: /\b(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/g },
-  { kind: "path", regex: /(?:\/[\w.-]+)+(?:\?[\w\-./?%&=:#+]*)?/g },
   { kind: "error-keyword", regex: /\b(?:TypeError|ReferenceError|SyntaxError|RangeError|Error|Exception|失败|错误|超时)\b/g },
-  { kind: "warn-keyword", regex: /\b(?:warning|warn|警告|deprecated|过期)\b/gi },
-  { kind: "success-keyword", regex: /\b(?:success|成功|完成|loaded|ready)\b/gi },
-  { kind: "metric", regex: /\b\d+(?:\.\d+)?(?:ms|s|m|h|x|\/\d+|%)\b/g },
   { kind: "stack-prefix", regex: /^at\b/g },
   { kind: "stack-frame", regex: /\b[\w./-]+\.(?:vue|ts|tsx|js|jsx):\d+\b/g },
 ];
 
 export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void }) {
   const tone = getLogSemanticTone(log);
-  const timeTone = tone === "error" || tone === "warn" ? tone : "muted";
   const messageTokens = tokenizeLogText(log.message);
   return (
     <button
@@ -47,9 +34,9 @@ export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void
       ].join(" ")}
       onClick={onClick}
     >
-      <span className={`time-cell ${timeTone}`}>{timeOnly(log.timeText)}</span>
+      <span className="time-cell">{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${chipTone(tone)}`}>{log.level}</span>
-      <span className={`tag-cell tag-tone-${tagTone(tone)}`}>{log.tag}</span>
+      <span className="tag-cell">{log.tag}</span>
       <span className="message-cell">
         <TokenText tokens={messageTokens} />
       </span>
@@ -129,28 +116,9 @@ function getLogSemanticTone(log: LogItemView) {
   if (log.message.startsWith("at ")) {
     return "stack";
   }
-  if (/\b(GET|POST|PUT|PATCH|DELETE)\b/.test(log.message) || /\/[\w.-]/.test(log.message)) {
-    return "request";
-  }
-  if (/\b(成功|完成|loaded|ready|success)\b/i.test(log.message)) {
-    return "success";
-  }
   return "info";
 }
 
 function chipTone(tone: ReturnType<typeof getLogSemanticTone>) {
-  return tone === "request" || tone === "stack" || tone === "success" ? "info" : tone;
-}
-
-function tagTone(tone: ReturnType<typeof getLogSemanticTone>) {
-  if (tone === "error") {
-    return "error";
-  }
-  if (tone === "warn") {
-    return "warn";
-  }
-  if (tone === "request") {
-    return "request";
-  }
-  return "default";
+  return tone === "error" || tone === "warn" ? tone : "info";
 }
