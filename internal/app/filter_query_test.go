@@ -97,6 +97,22 @@ func TestCompileFilterQuerySupportsNegatedContains(t *testing.T) {
 	}
 }
 
+func TestCompileFilterQuerySupportsEqualsAliases(t *testing.T) {
+	entry := logcat.LogEntry{
+		Level:   "I",
+		Tag:     "jsbridge",
+		Message: "native channel ready",
+	}
+
+	compiled, err := compileFilterQuery(`tag=jsbridge || message="native channel"`)
+	if err != nil {
+		t.Fatalf("compile returned error: %v", err)
+	}
+	if !compiled.matches(entry, "com.demo.app") {
+		t.Fatal("expected equals aliases to match")
+	}
+}
+
 func TestCompileFilterQueryRejectsInvalidSyntax(t *testing.T) {
 	cases := []string{
 		`(`,

@@ -27,9 +27,9 @@ const (
 )
 
 type compiledFilterQuery struct {
-	root               *compiledFilterNode
-	needsLowerMessage  bool
-	needsLowerTag      bool
+	root              *compiledFilterNode
+	needsLowerMessage bool
+	needsLowerTag     bool
 }
 
 type compiledFilterNode struct {
@@ -149,49 +149,52 @@ func (t compiledFilterTerm) matches(
 
 func compileFilterTerm(term string) compiledFilterTerm {
 	normalized, negated := normalizeFilterTerm(term)
-	switch {
-	case strings.HasPrefix(normalized, "tag~:"):
+	if value, ok := trimFieldPrefix(normalized, "tag~:", "tag~="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermTagContains,
-			value:   strings.ToLower(trimQueryValue(strings.TrimPrefix(normalized, "tag~:"))),
+			value:   strings.ToLower(trimQueryValue(value)),
 			negated: negated,
 		}
-	case strings.HasPrefix(normalized, "tag:"):
+	}
+	if value, ok := trimFieldPrefix(normalized, "tag:", "tag="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermTag,
-			value:   trimQueryValue(strings.TrimPrefix(normalized, "tag:")),
+			value:   trimQueryValue(value),
 			negated: negated,
 		}
-	case strings.HasPrefix(normalized, "message~:"):
+	}
+	if value, ok := trimFieldPrefix(normalized, "message~:", "message~="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermMessageContains,
-			value:   strings.ToLower(trimQueryValue(strings.TrimPrefix(normalized, "message~:"))),
+			value:   strings.ToLower(trimQueryValue(value)),
 			negated: negated,
 		}
-	case strings.HasPrefix(normalized, "message:"):
+	}
+	if value, ok := trimFieldPrefix(normalized, "message:", "message="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermMessage,
-			value:   strings.ToLower(trimQueryValue(strings.TrimPrefix(normalized, "message:"))),
+			value:   strings.ToLower(trimQueryValue(value)),
 			negated: negated,
 		}
-	case strings.HasPrefix(normalized, "package:"):
+	}
+	if value, ok := trimFieldPrefix(normalized, "package:", "package="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermPackage,
-			value:   trimQueryValue(strings.TrimPrefix(normalized, "package:")),
+			value:   trimQueryValue(value),
 			negated: negated,
 		}
-	case strings.HasPrefix(normalized, "level:"):
+	}
+	if value, ok := trimFieldPrefix(normalized, "level:", "level="); ok {
 		return compiledFilterTerm{
 			kind:    filterTermLevel,
-			value:   trimQueryValue(strings.TrimPrefix(normalized, "level:")),
+			value:   trimQueryValue(value),
 			negated: negated,
 		}
-	default:
-		return compiledFilterTerm{
-			kind:    filterTermText,
-			value:   strings.ToLower(trimQueryValue(normalized)),
-			negated: negated,
-		}
+	}
+	return compiledFilterTerm{
+		kind:    filterTermText,
+		value:   strings.ToLower(trimQueryValue(normalized)),
+		negated: negated,
 	}
 }
 
@@ -206,6 +209,15 @@ func normalizeFilterTerm(term string) (string, bool) {
 		return trimmed, false
 	}
 	return strings.TrimSpace(strings.TrimPrefix(trimmed, "-")), true
+}
+
+func trimFieldPrefix(term string, prefixes ...string) (string, bool) {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(term, prefix) {
+			return strings.TrimPrefix(term, prefix), true
+		}
+	}
+	return "", false
 }
 
 func (c *Controller) setAppliedFilterLocked(query string) {

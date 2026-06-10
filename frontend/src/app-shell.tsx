@@ -169,7 +169,7 @@ export function FilterBar({
               onApplyFilter();
             }
           }}
-          placeholder='tag:"chromium" && message~:"[H5]"'
+          placeholder='tag=jsbridge || message~:"jsbridge"'
         />
       </div>
       <SelectControl

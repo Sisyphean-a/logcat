@@ -179,7 +179,7 @@ function parseGroupQuery(query: string) {
 }
 
 function parseConditionQuery(query: string) {
-  const levelMatch = query.match(/^(-)?level:([A-Z])$/);
+  const levelMatch = query.match(/^(-)?level[:=]([A-Z])$/);
   if (levelMatch) {
     return createParsedCondition(
       "level",
@@ -188,21 +188,21 @@ function parseConditionQuery(query: string) {
     );
   }
 
-  const tagMatch = query.match(/^(-)?tag(~?):"([^"]*)"$/);
+  const tagMatch = query.match(/^(-)?tag(~?)(?::|=)(?:"([^"]*)"|(.+))$/);
   if (tagMatch) {
     return createParsedCondition(
       "tag",
       parseStringOperator(tagMatch[1], tagMatch[2] === "~"),
-      tagMatch[3],
+      (tagMatch[3] ?? tagMatch[4]).trim(),
     );
   }
 
-  const messageMatch = query.match(/^(-)?message~:"([^"]*)"$/);
+  const messageMatch = query.match(/^(-)?message(~?)(?::|=)(?:"([^"]*)"|(.+))$/);
   if (messageMatch) {
     return createParsedCondition(
       "message",
       messageMatch[1] ? "notContains" : "contains",
-      messageMatch[2],
+      (messageMatch[3] ?? messageMatch[4]).trim(),
     );
   }
 

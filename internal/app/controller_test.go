@@ -174,6 +174,53 @@ func TestControllerApplyEmptyFilterShowsAllLogs(t *testing.T) {
 	}
 }
 
+func TestControllerApplyOrFilterShowsTagOrMessageMatches(t *testing.T) {
+	events := make(chan session.Event, 3)
+	controller := newStreamingController(t, events)
+
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.479",
+		Level:    "I",
+		Tag:      "jsbridge",
+		Message:  "native channel ready",
+		Raw:      "native channel ready",
+	}}
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.480",
+		Level:    "I",
+		Tag:      "chromium",
+		Message:  "jsbridge opened h5 channel",
+		Raw:      "jsbridge opened h5 channel",
+	}}
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.481",
+		Level:    "I",
+		Tag:      "ActivityManager",
+		Message:  "plain log",
+		Raw:      "plain log",
+	}}
+
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 3
+	})
+
+	controller.SetFilterDraft(`tag=jsbridge || message~:"jsbridge"`)
+	if err := controller.ApplyFilterDraft(); err != nil {
+		t.Fatalf("ApplyFilterDraft returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if len(model.VisibleLogs) != 2 {
+		t.Fatalf("expected 2 visible logs after OR filter, got %d", len(model.VisibleLogs))
+	}
+	if model.VisibleLogs[0].Entry.Tag != "jsbridge" {
+		t.Fatalf("expected tag match first, got %q", model.VisibleLogs[0].Entry.Tag)
+	}
+	if model.VisibleLogs[1].Entry.Message != "jsbridge opened h5 channel" {
+		t.Fatalf("expected message match second, got %q", model.VisibleLogs[1].Entry.Message)
+	}
+}
+
 func TestControllerLoadADBMissingSetsExplicitStatus(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{
