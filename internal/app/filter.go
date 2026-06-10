@@ -48,9 +48,16 @@ func (c *Controller) SelectSavedFilter(id string) error {
 		return err
 	}
 
+	compiled, err := compileFilterQuery(filter.Query)
+	if err != nil {
+		c.model.Filter.Error = err.Error()
+		c.markDirtyLocked()
+		return err
+	}
+
 	c.model.Filter.ActiveFilterID = filter.ID
 	c.model.Filter.Draft = filter.Query
-	c.setAppliedFilterLocked(filter.Query)
+	c.setCompiledFilterLocked(filter.Query, compiled)
 	c.model.Filter.Error = ""
 	if filter.PackageName != "" {
 		c.model.SelectedPackage = filter.PackageName
@@ -80,6 +87,12 @@ func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
 		return err
 	}
 
+	compiled, err := compileFilterQuery(filter.Query)
+	if err != nil {
+		c.updateFilterError(err.Error())
+		return err
+	}
+
 	var bindErr error
 	switch {
 	case filter.PackageName != "" && filter.PackageName != currentPackage:
@@ -91,7 +104,7 @@ func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
 	c.mu.Lock()
 	c.model.Filter.ActiveFilterID = filter.ID
 	c.model.Filter.Draft = filter.Query
-	c.setAppliedFilterLocked(filter.Query)
+	c.setCompiledFilterLocked(filter.Query, compiled)
 	c.model.Filter.Error = ""
 	if filter.PackageName == "" {
 		c.model.SelectedPackage = ""
@@ -106,18 +119,29 @@ func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
 }
 
 func (c *Controller) SaveCurrentFilter(name string) error {
+	c.mu.RLock()
+	packageName := c.model.SelectedPackage
+	query := c.model.Filter.Draft
+	c.mu.RUnlock()
+
+	return c.SaveFilterDefinition(name, packageName, query)
+}
+
+func (c *Controller) SaveFilterDefinition(name string, packageName string, query string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	trimmedName := strings.TrimSpace(name)
-	query := strings.TrimSpace(c.model.Filter.Draft)
+	trimmedPackageName := strings.TrimSpace(packageName)
+	query = strings.TrimSpace(query)
 	if trimmedName == "" {
 		err := fmt.Errorf("saved_filter_name_required")
 		c.model.Filter.Error = err.Error()
 		c.markDirtyLocked()
 		return err
 	}
-	if err := validateFilterQuery(query); err != nil {
+	compiled, err := compileFilterQuery(query)
+	if err != nil {
 		c.model.Filter.Error = err.Error()
 		c.markDirtyLocked()
 		return err
@@ -128,12 +152,12 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 	saved := SavedFilter{
 		ID:          id,
 		Name:        trimmedName,
-		PackageName: c.model.SelectedPackage,
+		PackageName: trimmedPackageName,
 		Query:       query,
 	}
 	c.model.Filter.Saved = upsertSavedFilter(c.model.Filter.Saved, saved)
 	c.model.Filter.ActiveFilterID = saved.ID
-	c.setAppliedFilterLocked(query)
+	c.setCompiledFilterLocked(query, compiled)
 	c.model.Filter.Draft = query
 	c.model.Filter.Error = ""
 	c.recordFilterHistoryLocked(query)
@@ -142,13 +166,14 @@ func (c *Controller) SaveCurrentFilter(name string) error {
 }
 
 func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) error {
-	if err := validateFilterQuery(query); err != nil {
+	compiled, err := compileFilterQuery(query)
+	if err != nil {
 		c.model.Filter.Error = err.Error()
 		c.markDirtyLocked()
 		return err
 	}
 
-	c.setAppliedFilterLocked(query)
+	c.setCompiledFilterLocked(query, compiled)
 	c.model.Filter.Error = ""
 	c.syncActiveFilterLocked()
 	if recordHistory {
@@ -159,74 +184,16 @@ func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) er
 }
 
 func validateFilterQuery(query string) error {
-	if query == "" {
-		return nil
-	}
-
-	open := 0
-	for _, r := range query {
-		switch r {
-		case '(':
-			open++
-		case ')':
-			open--
-		}
-		if open < 0 {
-			return fmt.Errorf("filter_query_invalid: unmatched ')'")
-		}
-	}
-	if open != 0 {
-		return fmt.Errorf("filter_query_invalid: unmatched '('")
-	}
-	if strings.Count(query, "\"")%2 != 0 {
-		return fmt.Errorf("filter_query_invalid: unmatched quote")
-	}
-	return nil
+	_, err := compileFilterQuery(query)
+	return err
 }
 
 func matchesFilter(entry logcat.LogEntry, packageName string, query string) bool {
-	return compileFilterQuery(query).matches(entry, packageName)
-}
-
-func splitAndTerms(query string) []string {
-	parts := strings.Split(query, "&")
-	terms := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(strings.Trim(part, "()"))
-		if trimmed != "" {
-			terms = append(terms, trimmed)
-		}
+	compiled, err := compileFilterQuery(query)
+	if err != nil {
+		return false
 	}
-	return terms
-}
-
-func matchTerm(entry logcat.LogEntry, packageName string, term string) bool {
-	negated := strings.HasPrefix(term, "-")
-	if negated {
-		term = strings.TrimSpace(strings.TrimPrefix(term, "-"))
-	}
-
-	matched := true
-	switch {
-	case strings.HasPrefix(term, "tag:"):
-		expected := strings.TrimSpace(strings.TrimPrefix(term, "tag:"))
-		matched = entry.Tag == "" || strings.EqualFold(entry.Tag, expected)
-	case strings.HasPrefix(term, "message:"):
-		expected := strings.Trim(strings.TrimSpace(strings.TrimPrefix(term, "message:")), "\"")
-		matched = strings.Contains(strings.ToLower(entry.Message), strings.ToLower(expected))
-	case strings.HasPrefix(term, "package:"):
-		matched = strings.EqualFold(packageName, strings.TrimSpace(strings.TrimPrefix(term, "package:")))
-	case strings.HasPrefix(term, "level:"):
-		expected := strings.TrimSpace(strings.TrimPrefix(term, "level:"))
-		matched = entry.Level == "" || strings.EqualFold(entry.Level, expected)
-	default:
-		matched = strings.Contains(strings.ToLower(entry.Message), strings.ToLower(term))
-	}
-
-	if negated {
-		return !matched
-	}
-	return matched
+	return compiled.matches(entry, packageName)
 }
 
 func findSavedFilter(filters []SavedFilter, id string) (SavedFilter, bool) {

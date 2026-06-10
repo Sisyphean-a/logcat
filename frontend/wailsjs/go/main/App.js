@@ -54,6 +54,10 @@ export function SaveCurrentFilter(arg1) {
   return window['go']['main']['App']['SaveCurrentFilter'](arg1);
 }
 
+export function SaveFilterDefinition(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveFilterDefinition'](arg1, arg2, arg3);
+}
+
 export function SelectDevice(arg1) {
   return window['go']['main']['App']['SelectDevice'](arg1);
 }

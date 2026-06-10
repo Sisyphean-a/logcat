@@ -12,8 +12,7 @@ type LogTokenKind =
   | "url"
   | "metric"
   | "stack-prefix"
-  | "stack-frame"
-  | "source-ref";
+  | "stack-frame";
 
 type LogTextToken = {
   text: string;
@@ -33,17 +32,10 @@ const messagePatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
   { kind: "stack-frame", regex: /\b[\w./-]+\.(?:vue|ts|tsx|js|jsx):\d+\b/g },
 ];
 
-const sourcePatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
-  { kind: "url", regex: /https?:\/\/[^\s)]+/g },
-  { kind: "source-ref", regex: /\b[\w./-]+\.(?:vue|ts|tsx|js|jsx):\d+\b/g },
-  { kind: "path", regex: /(?:\/[\w.-]+)+(?:\?[\w\-./?%&=:#+]*)?/g },
-];
-
 export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void }) {
   const tone = getLogSemanticTone(log);
   const timeTone = tone === "error" || tone === "warn" ? tone : "muted";
-  const messageTokens = tokenizeLogText(log.message, "message");
-  const sourceTokens = tokenizeLogText(log.source || "-", "source");
+  const messageTokens = tokenizeLogText(log.message);
   return (
     <button
       className={[
@@ -60,9 +52,6 @@ export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void
       <span className={`tag-cell tag-tone-${tagTone(tone)}`}>{log.tag}</span>
       <span className="message-cell">
         <TokenText tokens={messageTokens} />
-      </span>
-      <span className="source-cell">
-        <TokenText tokens={sourceTokens} />
       </span>
     </button>
   );
@@ -81,8 +70,8 @@ function TokenText({ tokens }: { tokens: LogTextToken[] }) {
   ));
 }
 
-function tokenizeLogText(text: string, kind: "message" | "source") {
-  const patterns = kind === "message" ? messagePatterns : sourcePatterns;
+function tokenizeLogText(text: string) {
+  const patterns = messagePatterns;
   const tokens: LogTextToken[] = [];
   let cursor = 0;
 

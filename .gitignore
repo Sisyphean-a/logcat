@@ -13,6 +13,8 @@
 *.test
 *.out
 
+.tmp/
+
 # Coverage
 .coverprofile
 *.coverprofile

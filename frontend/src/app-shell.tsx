@@ -1,9 +1,55 @@
-import { ClearIcon, DetailCollapseIcon, DeviceIcon, DotIcon, DownloadIcon, PauseIcon, PlayIcon, SaveIcon, SearchIcon, SettingsIcon } from "./icons";
 import { main } from "../wailsjs/go/models";
-import { LogRow, timeOnly, type LogItemView } from "./log-row";
+import {
+  ClearIcon,
+  DetailCollapseIcon,
+  DeviceIcon,
+  DotIcon,
+  DownloadIcon,
+  PauseIcon,
+  PlayIcon,
+  SaveIcon,
+  SearchIcon,
+  SettingsIcon,
+} from "./icons";
+import { timeOnly } from "./log-row";
 import { SelectControl, type SelectOption } from "./select-control";
 
 export type AppState = main.AppState;
+
+type ToolbarProps = {
+  state: AppState;
+  onSelectDevice: (deviceID: string) => void;
+  onApplySavedFilter: (filterID: string) => void;
+  onPauseToggle: () => void;
+  onClearVisible: () => void;
+  onExport: () => void;
+};
+
+type FilterBarProps = {
+  state: AppState;
+  autoFollow: boolean;
+  onSelectPackage: (packageName: string) => void;
+  onFilterDraftChange: (query: string) => void;
+  onApplyFilter: () => void;
+  onSetPackageScope: (scope: string) => void;
+  onToggleFollow: () => void;
+  onSaveFilter: () => void;
+};
+
+type DetailPanelProps = {
+  state: AppState;
+  collapsed: boolean;
+  onToggle: () => void;
+  onCopyDisplay: () => void;
+  onCopyRaw: () => void;
+  onCopyMessage: () => void;
+};
+
+type StatusBarProps = {
+  state: AppState;
+  autoFollow: boolean;
+  statusText: string;
+};
 
 export function Toolbar({
   state,
@@ -12,14 +58,7 @@ export function Toolbar({
   onPauseToggle,
   onClearVisible,
   onExport,
-}: {
-  state: AppState;
-  onSelectDevice: (deviceID: string) => void;
-  onApplySavedFilter: (filterID: string) => void;
-  onPauseToggle: () => void;
-  onClearVisible: () => void;
-  onExport: () => void;
-}) {
+}: ToolbarProps) {
   const deviceOptions: SelectOption[] = state.devices.map((device) => ({
     value: device.id,
     label: device.model || device.id,
@@ -82,17 +121,8 @@ export function FilterBar({
   onSetPackageScope,
   onToggleFollow,
   onSaveFilter,
-}: {
-  state: AppState;
-  autoFollow: boolean;
-  onSelectPackage: (packageName: string) => void;
-  onFilterDraftChange: (query: string) => void;
-  onApplyFilter: () => void;
-  onSetPackageScope: (scope: string) => void;
-  onToggleFollow: () => void;
-  onSaveFilter: () => void;
-}) {
-  const packageOptions: SelectOption[] = state.packages.map((pkg) => ({
+}: FilterBarProps) {
+  const packageOptions = state.packages.map((pkg) => ({
     value: pkg.name,
     label: pkg.name,
   }));
@@ -123,7 +153,7 @@ export function FilterBar({
               onApplyFilter();
             }
           }}
-          placeholder="tag:chromium & message:[H5]"
+          placeholder='tag:"chromium" && message~:"[H5]"'
         />
       </div>
       <SelectControl
@@ -152,59 +182,6 @@ export function FilterBar({
   );
 }
 
-export function LogTable({
-  loading,
-  logs,
-  visibleCount,
-  scrollTop,
-  viewportHeight,
-  tableRef,
-  onScroll,
-  onSelectLog,
-}: {
-  loading: boolean;
-  logs: LogItemView[];
-  visibleCount: number;
-  scrollTop: number;
-  viewportHeight: number;
-  tableRef: React.RefObject<HTMLDivElement>;
-  onScroll: () => void;
-  onSelectLog: (index: number) => void;
-}) {
-  const rowHeight = 27;
-  const buffer = 20;
-  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - buffer);
-  const visibleRows = Math.ceil(viewportHeight / rowHeight) + buffer * 2;
-  const end = Math.min(logs.length, start + visibleRows);
-  const topSpacer = start * rowHeight;
-  const bottomSpacer = Math.max(0, (logs.length - end) * rowHeight);
-
-  return (
-    <div className="table-shell">
-      <div className="table-head">
-        <span>时间</span>
-        <span>级</span>
-        <span>标签</span>
-        <span>消息</span>
-        <span>来源</span>
-      </div>
-      <div className="table-body" ref={tableRef} onScroll={onScroll}>
-        {loading ? (
-          <div className="placeholder">正在加载状态…</div>
-        ) : visibleCount === 0 ? (
-          <div className="placeholder">暂无日志</div>
-        ) : (
-          <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
-            {logs.slice(start, end).map((log) => (
-              <LogRow key={`${log.index}-${log.raw}`} log={log} onClick={() => onSelectLog(log.index)} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function DetailPanel({
   state,
   collapsed,
@@ -212,14 +189,7 @@ export function DetailPanel({
   onCopyDisplay,
   onCopyRaw,
   onCopyMessage,
-}: {
-  state: AppState;
-  collapsed: boolean;
-  onToggle: () => void;
-  onCopyDisplay: () => void;
-  onCopyRaw: () => void;
-  onCopyMessage: () => void;
-}) {
+}: DetailPanelProps) {
   return (
     <aside className={`detail-panel ${collapsed ? "collapsed" : ""}`}>
       <button className="detail-toggle" onClick={onToggle}>
@@ -263,15 +233,7 @@ export function DetailPanel({
   );
 }
 
-export function StatusBar({
-  state,
-  autoFollow,
-  statusText,
-}: {
-  state: AppState;
-  autoFollow: boolean;
-  statusText: string;
-}) {
+export function StatusBar({ state, autoFollow, statusText }: StatusBarProps) {
   const currentDevice = state.devices.find((item) => item.id === state.selectedDevice);
   const currentFilter = state.filter.saved.find((item) => item.id === state.filter.activeFilterId);
 

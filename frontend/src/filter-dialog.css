@@ -1,0 +1,210 @@
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 10, 14, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.dialog-card {
+  width: min(760px, 100%);
+  max-height: min(88vh, 860px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(0, 211, 243, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(27, 30, 39, 0.96), rgba(18, 19, 24, 0.98));
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.dialog-header,
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.dialog-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dialog-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.dialog-body {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  overflow: auto;
+}
+
+.dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f2f6fb;
+}
+
+.dialog-subtitle {
+  margin-top: 4px;
+  color: rgba(212, 212, 212, 0.7);
+  font-size: 12px;
+}
+
+.dialog-field {
+  display: grid;
+  gap: 8px;
+}
+
+.dialog-field > span,
+.dialog-field-header {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dialog-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dialog-input,
+.dialog-select,
+.dialog-preview {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(10, 12, 16, 0.72);
+  color: var(--text);
+}
+
+.dialog-input,
+.dialog-select {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.dialog-preview {
+  min-height: 72px;
+  padding: 10px 12px;
+  resize: vertical;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rule-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.rule-group-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rule-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rule-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #eef4ff;
+}
+
+.rule-group-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rule-condition-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rule-condition-row {
+  display: grid;
+  grid-template-columns: 52px 96px 116px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.rule-join {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #9fb8c7;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
+.rule-join.muted {
+  color: rgba(159, 184, 199, 0.52);
+}
+
+.rule-value-input {
+  min-width: 0;
+}
+
+.mini-button {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.dialog-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 100, 103, 0.18);
+  background: rgba(255, 100, 103, 0.08);
+  color: #ffb6b8;
+  font-size: 12px;
+}
+
+.dialog-close {
+  min-width: 64px;
+}
+
+@media (max-width: 820px) {
+  .dialog-overlay {
+    padding: 12px;
+  }
+
+  .dialog-card {
+    max-height: 94vh;
+  }
+
+  .rule-condition-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rule-join,
+  .rule-condition-row .mini-button {
+    grid-column: span 2;
+  }
+
+  .rule-value-input,
+  .level-select {
+    grid-column: span 2;
+  }
+}

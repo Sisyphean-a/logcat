@@ -1,7 +1,14 @@
-import { DetailPanel, FilterBar, LogTable, StatusBar, Toolbar } from "./app-shell";
+import { useState } from "react";
+import { DetailPanel, FilterBar, StatusBar, Toolbar } from "./app-shell";
+import { type SaveFilterDraft, suggestFilterName } from "./filter-rule-builder";
+import { LogTable } from "./log-table";
+import { SaveFilterDialog } from "./save-filter-dialog";
 import { useAppController } from "./use-app-controller";
 
 export default function App() {
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveDialogBusy, setSaveDialogBusy] = useState(false);
+  const [saveDialogError, setSaveDialogError] = useState("");
   const {
     state,
     loading,
@@ -16,6 +23,19 @@ export default function App() {
     handleScroll,
     api,
   } = useAppController();
+
+  async function handleSaveFilter(draft: SaveFilterDraft) {
+    setSaveDialogBusy(true);
+    setSaveDialogError("");
+    try {
+      await api.saveFilter(draft);
+      setSaveDialogOpen(false);
+    } catch (error) {
+      setSaveDialogError(String(error));
+    } finally {
+      setSaveDialogBusy(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -37,8 +57,11 @@ export default function App() {
             onFilterDraftChange={(query) => void api.setFilterDraft(query)}
             onApplyFilter={() => void api.applyFilter()}
             onSetPackageScope={(scope) => void api.setPackageScope(scope)}
-            onToggleFollow={() => setAutoFollow((value) => !value)}
-            onSaveFilter={() => void api.saveFilter()}
+            onToggleFollow={() => setAutoFollow(!autoFollow)}
+            onSaveFilter={() => {
+              setSaveDialogError("");
+              setSaveDialogOpen(true);
+            }}
           />
 
           <LogTable
@@ -68,7 +91,21 @@ export default function App() {
         autoFollow={autoFollow}
         statusText={displayStatus(actionError, state.filter.error, state.status)}
       />
-
+      <SaveFilterDialog
+        errorMessage={saveDialogError}
+        existingQuery={state.filter.draft}
+        initialName={suggestFilterName(state.selectedPackage, state.filter.draft)}
+        initialPackageName={state.selectedPackage}
+        open={saveDialogOpen}
+        packageOptions={state.packages.map((pkg) => pkg.name)}
+        saving={saveDialogBusy}
+        onClose={() => {
+          if (!saveDialogBusy) {
+            setSaveDialogOpen(false);
+          }
+        }}
+        onSubmit={handleSaveFilter}
+      />
     </div>
   );
 }

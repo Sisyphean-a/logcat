@@ -11,13 +11,14 @@ import {
   GetState,
   Pause,
   ResumeKeep,
-  SaveCurrentFilter,
+  SaveFilterDefinition,
   SelectDevice,
   SelectLog,
   SelectPackage,
   SetFilterDraft,
   SetPackageScope,
 } from "../wailsjs/go/main/App";
+import { type SaveFilterDraft } from "./filter-rule-builder";
 
 export type AppState = main.AppState;
 
@@ -32,6 +33,17 @@ export function useAppController() {
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const autoFollowRef = useRef(autoFollow);
+  const ignoreScrollRef = useRef(false);
+
+  function syncTableMetrics(node: HTMLDivElement) {
+    setScrollTop(node.scrollTop);
+    setViewportHeight(node.clientHeight);
+  }
+
+  useEffect(() => {
+    autoFollowRef.current = autoFollow;
+  }, [autoFollow]);
 
   useEffect(() => {
     if (!isWailsRuntime()) {
@@ -81,11 +93,9 @@ export function useAppController() {
   }, []);
 
   useEffect(() => {
-    const node = tableRef.current;
-    if (!node || !autoFollow) {
-      return;
+    if (autoFollow) {
+      scrollToBottom();
     }
-    node.scrollTop = node.scrollHeight;
   }, [autoFollow, state.logs.length]);
 
   useEffect(() => {
@@ -93,7 +103,7 @@ export function useAppController() {
     if (!node) {
       return;
     }
-    setViewportHeight(node.clientHeight);
+    syncTableMetrics(node);
   }, [state.logs.length]);
 
   const api = useMemo(
@@ -122,8 +132,11 @@ export function useAppController() {
       },
       clearVisible: () =>
         ClearVisible().then((next: AppState) => setState(main.AppState.createFrom(next))),
-      saveFilter: async () => {
-        await withAction(() => SaveCurrentFilter(autoFilterName(state)), setActionError);
+      saveFilter: async (draft: SaveFilterDraft) => {
+        await withAction(
+          () => SaveFilterDefinition(draft.name, draft.packageName, draft.query),
+          setActionError,
+        );
       },
     } : createPreviewApi(state, setState, setActionError)),
     [state],
@@ -134,12 +147,44 @@ export function useAppController() {
     if (!node) {
       return;
     }
+
+    syncTableMetrics(node);
+    if (ignoreScrollRef.current) {
+      return;
+    }
+
     const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 8;
-    setScrollTop(node.scrollTop);
-    setViewportHeight(node.clientHeight);
-    if (!atBottom && autoFollow) {
+    if (!atBottom && autoFollowRef.current) {
       setAutoFollow(false);
     }
+  }
+
+  function setAutoFollowEnabled(next: boolean) {
+    setAutoFollow(next);
+    if (next) {
+      scrollToBottom();
+    }
+  }
+
+  function scrollToBottom() {
+    const node = tableRef.current;
+    if (!node) {
+      return;
+    }
+
+    ignoreScrollRef.current = true;
+    requestAnimationFrame(() => {
+      const currentNode = tableRef.current;
+      if (!currentNode) {
+        ignoreScrollRef.current = false;
+        return;
+      }
+      currentNode.scrollTop = currentNode.scrollHeight;
+      syncTableMetrics(currentNode);
+      requestAnimationFrame(() => {
+        ignoreScrollRef.current = false;
+      });
+    });
   }
 
   return {
@@ -151,7 +196,7 @@ export function useAppController() {
     scrollTop,
     viewportHeight,
     tableRef,
-    setAutoFollow,
+    setAutoFollow: setAutoFollowEnabled,
     setDetailCollapsed,
     handleScroll,
     api,
@@ -203,17 +248,6 @@ const emptyState = new main.AppState({
   selectedIndex: -1,
   logs: [],
 });
-
-function autoFilterName(state: AppState) {
-  if (state.selectedPackage) {
-    return state.selectedPackage;
-  }
-  const query = state.filter.draft.trim();
-  if (!query) {
-    return "H5 日志";
-  }
-  return query.length > 24 ? query.slice(0, 24) : query;
-}
 
 function isWailsRuntime() {
   return Boolean((window as unknown as { go?: unknown; runtime?: unknown }).go) &&
@@ -289,6 +323,31 @@ function createPreviewApi(
       next.selectedLog = undefined;
       setState(next);
     },
-    saveFilter: async () => setError("浏览器预览模式不写入过滤器"),
+    saveFilter: async (draft: SaveFilterDraft) => {
+      const next = main.AppState.createFrom(state);
+      const id = draft.name.trim().toLowerCase().replaceAll(" ", "-");
+      next.filter.draft = draft.query;
+      next.filter.applied = draft.query;
+      next.filter.activeFilterId = id;
+      next.selectedPackage = draft.packageName;
+      next.filter.saved = upsertPreviewFilter(next.filter.saved, {
+        id,
+        name: draft.name,
+        packageName: draft.packageName,
+        query: draft.query,
+      });
+      setState(next);
+      setError("");
+    },
   };
+}
+
+function upsertPreviewFilter(filters: main.SavedFilterView[], nextFilter: main.SavedFilterView) {
+  const index = filters.findIndex((filter) => filter.id === nextFilter.id);
+  if (index === -1) {
+    return [...filters, nextFilter];
+  }
+  const next = [...filters];
+  next[index] = nextFilter;
+  return next;
 }

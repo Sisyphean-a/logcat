@@ -80,6 +80,7 @@ select {
 svg {
   width: 100%;
   height: 100%;
+  display: block;
 }
 
 .app-shell {
@@ -175,11 +176,12 @@ svg {
 .filter-icon,
 .select-icon,
 .chevron {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 0;
 }
 
 .toolbar-spacer,
@@ -201,6 +203,7 @@ svg {
   color: var(--text-secondary);
   cursor: pointer;
   flex: 0 0 auto;
+  line-height: 1;
 }
 
 .icon-button:hover,
@@ -286,6 +289,7 @@ svg {
   color: var(--text);
   padding: 0 10px;
   font-size: 11px;
+  line-height: 1.2;
 }
 
 .filter-input input {
@@ -296,7 +300,8 @@ svg {
 .filter-icon {
   position: absolute;
   left: 8px;
-  top: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-muted);
 }
 
@@ -547,7 +552,6 @@ svg {
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: 96px 32px 72px minmax(200px, 1fr) 160px;
   gap: 12px;
   align-items: center;
   font-family: "JetBrains Mono", Consolas, monospace;
@@ -580,10 +584,6 @@ svg {
   position: relative;
   background: var(--row-info-bg);
   transition: background-color 0.12s ease, border-color 0.12s ease;
-}
-
-.table-row > span {
-  min-width: 0;
 }
 
 .table-row:hover {
@@ -662,8 +662,7 @@ svg {
 }
 
 .message-cell,
-.tag-cell,
-.source-cell {
+.tag-cell {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -705,8 +704,7 @@ svg {
   color: var(--tag-request);
 }
 
-.message-cell,
-.source-cell {
+.message-cell {
   color: var(--text);
 }
 
@@ -798,6 +796,9 @@ svg {
 
 .detail-toggle {
   width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-right: 1px solid var(--border);
   color: var(--text-muted);
 }
@@ -931,10 +932,6 @@ svg {
     min-width: 240px;
   }
 
-  .table-head,
-  .table-row {
-    grid-template-columns: 92px 28px 68px minmax(180px, 1fr) 140px;
-  }
 }
 
 @media (max-width: 1120px) {

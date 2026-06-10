@@ -28,6 +28,8 @@ export function ResumeKeep():Promise<main.AppState>;
 
 export function SaveCurrentFilter(arg1:string):Promise<void>;
 
+export function SaveFilterDefinition(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function SelectDevice(arg1:string):Promise<void>;
 
 export function SelectForegroundPackage():Promise<void>;

@@ -33,7 +33,12 @@ func TestCompileFilterQueryMatchesEquivalentToLegacySemantics(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := compileFilterQuery(tc.query).matches(entry, tc.packageName)
+			compiled, err := compileFilterQuery(tc.query)
+			if err != nil {
+				t.Fatalf("compile returned error: %v", err)
+			}
+
+			got := compiled.matches(entry, tc.packageName)
 			if got != tc.want {
 				t.Fatalf("expected %v, got %v for query %q", tc.want, got, tc.query)
 			}
@@ -43,10 +48,68 @@ func TestCompileFilterQueryMatchesEquivalentToLegacySemantics(t *testing.T) {
 
 func TestCompileFilterQueryPreservesEmptyTagAndLevelBehavior(t *testing.T) {
 	entry := logcat.LogEntry{Message: "plain"}
-	if !compileFilterQuery("tag:anything").matches(entry, "") {
+	compiledTag, err := compileFilterQuery("tag:anything")
+	if err != nil {
+		t.Fatalf("compile tag query returned error: %v", err)
+	}
+	if !compiledTag.matches(entry, "") {
 		t.Fatal("expected empty tag to match tag filter")
 	}
-	if !compileFilterQuery("level:E").matches(entry, "") {
+
+	compiledLevel, err := compileFilterQuery("level:E")
+	if err != nil {
+		t.Fatalf("compile level query returned error: %v", err)
+	}
+	if !compiledLevel.matches(entry, "") {
 		t.Fatal("expected empty level to match level filter")
+	}
+}
+
+func TestCompileFilterQuerySupportsOrContainsAndGrouping(t *testing.T) {
+	entry := logcat.LogEntry{
+		Level:   "W",
+		Tag:     "bridge.dispatch",
+		Message: "bridge opened h5 channel",
+	}
+
+	compiled, err := compileFilterQuery(`(level:E || level:W) && tag~:"bridge" && message~:"h5"`)
+	if err != nil {
+		t.Fatalf("compile returned error: %v", err)
+	}
+	if !compiled.matches(entry, "com.demo.app") {
+		t.Fatal("expected grouped query to match")
+	}
+}
+
+func TestCompileFilterQuerySupportsNegatedContains(t *testing.T) {
+	entry := logcat.LogEntry{
+		Level:   "I",
+		Tag:     "bridge.dispatch",
+		Message: "bridge opened native channel",
+	}
+
+	compiled, err := compileFilterQuery(`tag~:"bridge" && -message~:"h5"`)
+	if err != nil {
+		t.Fatalf("compile returned error: %v", err)
+	}
+	if !compiled.matches(entry, "com.demo.app") {
+		t.Fatal("expected negated contains query to match")
+	}
+}
+
+func TestCompileFilterQueryRejectsInvalidSyntax(t *testing.T) {
+	cases := []string{
+		`(`,
+		`tag:bridge &&`,
+		`|| level:I`,
+		`message:"h5`,
+	}
+
+	for _, query := range cases {
+		t.Run(query, func(t *testing.T) {
+			if _, err := compileFilterQuery(query); err == nil {
+				t.Fatalf("expected compile error for %q", query)
+			}
+		})
 	}
 }

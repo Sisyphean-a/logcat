@@ -49,6 +49,11 @@ type Controller struct {
 const defaultBindingPollInterval = 500 * time.Millisecond
 
 func NewController(deviceService DeviceService, sessionStart SessionStarter) *Controller {
+	compiled, err := compileFilterQuery("")
+	if err != nil {
+		panic(err)
+	}
+
 	return &Controller{
 		deviceService:        deviceService,
 		sessionStart:         sessionStart,
@@ -61,7 +66,7 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 		bindingPollInterval:  defaultBindingPollInterval,
 		deviceReconcileDelay: trackedDeviceReconcileDelay,
 		binding:              SessionBinding{},
-		compiledFilter:       compileFilterQuery(""),
+		compiledFilter:       compiled,
 	}
 }
 

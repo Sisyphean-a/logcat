@@ -94,6 +94,12 @@ func (a *App) SaveCurrentFilter(name string) error {
 	})
 }
 
+func (a *App) SaveFilterDefinition(name string, packageName string, query string) error {
+	return a.runAction(func() error {
+		return a.controller.SaveFilterDefinition(name, packageName, query)
+	})
+}
+
 func (a *App) Pause() AppState {
 	a.controller.Pause()
 	return a.emitAndSnapshot()
