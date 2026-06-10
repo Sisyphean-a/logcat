@@ -1,6 +1,7 @@
 package adb
 
 import (
+	"bufio"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -34,8 +35,10 @@ func readDeviceUpdates(
 	defer close(errs)
 	defer reader.Close()
 
+	buffered := bufio.NewReader(reader)
+
 	for {
-		payload, err := readAdbPayload(reader)
+		payload, err := readAdbPayload(buffered)
 		if err != nil {
 			if err == io.EOF || isExpectedCommandExit(err) {
 				break
@@ -57,7 +60,11 @@ func readDeviceUpdates(
 	}
 }
 
-func readAdbPayload(reader io.Reader) (string, error) {
+func readAdbPayload(reader *bufio.Reader) (string, error) {
+	if err := skipFrameDelimiters(reader); err != nil {
+		return "", err
+	}
+
 	header := make([]byte, 4)
 	if _, err := io.ReadFull(reader, header); err != nil {
 		return "", err
@@ -76,6 +83,21 @@ func readAdbPayload(reader io.Reader) (string, error) {
 		return "", err
 	}
 	return string(payload), nil
+}
+
+func skipFrameDelimiters(reader *bufio.Reader) error {
+	for {
+		next, err := reader.Peek(1)
+		if err != nil {
+			return err
+		}
+		if next[0] != '\r' && next[0] != '\n' {
+			return nil
+		}
+		if _, err := reader.ReadByte(); err != nil {
+			return err
+		}
+	}
 }
 
 func decodeHexSize(header []byte) (int, error) {

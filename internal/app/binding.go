@@ -16,6 +16,14 @@ type SessionBinding struct {
 }
 
 func (c *Controller) SelectPackage(ctx context.Context, packageName string) error {
+	return c.selectPackage(ctx, packageName, false)
+}
+
+func (c *Controller) selectPackage(
+	ctx context.Context,
+	packageName string,
+	preserveLogs bool,
+) error {
 	if packageName == "" {
 		return c.clearPackageSelection(ctx)
 	}
@@ -35,16 +43,16 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 	switch c.currentSessionIntent() {
 	case sessionIntentNone:
 		if len(processes) == 0 {
-			err := c.prepareStoppedBinding(deviceID, packageName, "", nil)
+			err := c.prepareStoppedBinding(deviceID, packageName, "", nil, preserveLogs)
 			c.startBindingWatcher(deviceID, packageName, "")
 			return err
 		}
-		c.prepareBindingSelection(deviceID, packageName, "", processes, collectPIDs(processes))
+		c.prepareBindingSelection(deviceID, packageName, "", processes, collectPIDs(processes), preserveLogs)
 		c.startBindingWatcher(deviceID, packageName, "")
 		return nil
 	case sessionIntentPaused:
 		if len(processes) == 0 {
-			return c.activateStoppedBinding(deviceID, packageName, "", nil, true)
+			return c.activateStoppedBinding(deviceID, packageName, "", nil, true, preserveLogs)
 		}
 		return c.activateRunningBinding(
 			ctx,
@@ -54,10 +62,11 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 			processes,
 			collectPIDs(processes),
 			true,
+			preserveLogs,
 		)
 	default:
 		if len(processes) == 0 {
-			return c.activateStoppedBinding(deviceID, packageName, "", nil, false)
+			return c.activateStoppedBinding(deviceID, packageName, "", nil, false, preserveLogs)
 		}
 		return c.activateRunningBinding(
 			ctx,
@@ -67,11 +76,20 @@ func (c *Controller) SelectPackage(ctx context.Context, packageName string) erro
 			processes,
 			collectPIDs(processes),
 			false,
+			preserveLogs,
 		)
 	}
 }
 
 func (c *Controller) SelectProcess(ctx context.Context, processName string) error {
+	return c.selectProcess(ctx, processName, false)
+}
+
+func (c *Controller) selectProcess(
+	ctx context.Context,
+	processName string,
+	preserveLogs bool,
+) error {
 	c.mu.RLock()
 	deviceID := c.binding.DeviceID
 	packageName := c.binding.PackageName
@@ -102,6 +120,7 @@ func (c *Controller) SelectProcess(ctx context.Context, processName string) erro
 			process.Name,
 			processes,
 			[]int{process.PID},
+			preserveLogs,
 		)
 		c.startBindingWatcher(deviceID, packageName, process.Name)
 		return nil
@@ -115,6 +134,7 @@ func (c *Controller) SelectProcess(ctx context.Context, processName string) erro
 		processes,
 		[]int{process.PID},
 		c.currentSessionIntent() == sessionIntentPaused,
+		preserveLogs,
 	)
 }
 
@@ -126,6 +146,7 @@ func (c *Controller) activateRunningBinding(
 	processes []adb.ProcessInfo,
 	pids []int,
 	paused bool,
+	preserveLogs bool,
 ) error {
 	c.stopWatcher()
 
@@ -140,7 +161,7 @@ func (c *Controller) activateRunningBinding(
 		ProcessName: processName,
 		PIDs:        append([]int(nil), pids...),
 	}
-	c.clearBindingViewLocked()
+	c.resetBindingViewLocked(!preserveLogs)
 	c.model.Pause.Active = paused
 	c.rememberBindingLocked(c.binding)
 	c.updateBoundModelLocked(packageName, processName, processes, pids)
@@ -159,6 +180,7 @@ func (c *Controller) activateStoppedBinding(
 	processName string,
 	processes []adb.ProcessInfo,
 	paused bool,
+	preserveLogs bool,
 ) error {
 	c.stopWatcher()
 	c.stopSession()
@@ -169,7 +191,7 @@ func (c *Controller) activateStoppedBinding(
 		PackageName: packageName,
 		ProcessName: processName,
 	}
-	c.clearBindingViewLocked()
+	c.resetBindingViewLocked(!preserveLogs)
 	c.model.Pause.Active = paused
 	c.rememberBindingLocked(c.binding)
 	c.updateBoundModelLocked(packageName, processName, processes, nil)
@@ -209,12 +231,18 @@ func (c *Controller) currentDeviceID() (string, error) {
 }
 
 func (c *Controller) clearBindingViewLocked() {
-	c.allLogs = c.allLogs[:0]
-	c.model.TotalLogs = 0
-	c.model.VisibleLogs = c.model.VisibleLogs[:0]
-	c.model.SelectedIndex = -1
-	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-	c.model.Search.Current = -1
+	c.resetBindingViewLocked(true)
+}
+
+func (c *Controller) resetBindingViewLocked(clearLogs bool) {
+	if clearLogs {
+		c.allLogs = c.allLogs[:0]
+		c.model.TotalLogs = 0
+		c.model.VisibleLogs = c.model.VisibleLogs[:0]
+		c.model.SelectedIndex = -1
+		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
+		c.model.Search.Current = -1
+	}
 	c.pauseBuffer = c.pauseBuffer[:0]
 	c.model.Pause.BufferedCount = 0
 	c.model.Pause.DroppedCount = 0

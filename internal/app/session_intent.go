@@ -49,8 +49,14 @@ func (c *Controller) pendingBindingForDevice(deviceID string) SessionBinding {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.resumeBinding.DeviceID != deviceID {
+	if c.resumeBinding.DeviceID == deviceID {
+		return cloneSessionBinding(c.resumeBinding)
+	}
+	if c.resumeBinding.PackageName == "" && c.resumeBinding.ProcessName == "" {
 		return SessionBinding{}
 	}
-	return cloneSessionBinding(c.resumeBinding)
+
+	binding := cloneSessionBinding(c.resumeBinding)
+	binding.DeviceID = deviceID
+	return binding
 }

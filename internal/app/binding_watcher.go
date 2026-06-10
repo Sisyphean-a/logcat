@@ -79,12 +79,16 @@ func (c *Controller) refreshBinding(
 	if !c.shouldRebind(deviceID, packageName, processName, pids) {
 		return
 	}
-	if !c.hasActiveSession() {
-		c.applyWatcherPreparedBinding(deviceID, packageName, processName, processes, pids)
-		return
-	}
 	if len(pids) == 0 {
 		c.applyWatcherStoppedBinding(deviceID, packageName, processName, processes)
+		return
+	}
+	if !c.hasActiveSession() {
+		if c.currentSessionIntent() == sessionIntentRunning {
+			c.applyWatcherRunningBinding(ctx, deviceID, packageName, processName, processes, pids)
+			return
+		}
+		c.applyWatcherPreparedBinding(deviceID, packageName, processName, processes, pids)
 		return
 	}
 

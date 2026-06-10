@@ -184,3 +184,42 @@ func TestTrackDevicesParsesLengthPrefixedSnapshots(t *testing.T) {
 		t.Fatalf("expected no tracking error, got %v", err)
 	}
 }
+
+func TestTrackDevicesParsesMultipleSnapshotsSeparatedByNewline(t *testing.T) {
+	runner := stubRunner{
+		outputs: map[string]string{
+			"adb track-devices -l": trackedDeviceFrame("device-1 device model:Pixel_7 transport_id:1\r") +
+				trackedDeviceFrame("") +
+				trackedDeviceFrame("device-2 device model:SM_A217F transport_id:2\r"),
+		},
+	}
+
+	service := NewService(runner, "")
+	updates, errs, err := service.TrackDevices(context.Background())
+	if err != nil {
+		t.Fatalf("TrackDevices returned error: %v", err)
+	}
+
+	first := <-updates
+	if len(first) != 1 || first[0].ID != "device-1" {
+		t.Fatalf("unexpected first tracked snapshot: %#v", first)
+	}
+
+	second := <-updates
+	if len(second) != 0 {
+		t.Fatalf("expected empty tracked snapshot after unplug, got %#v", second)
+	}
+
+	third := <-updates
+	if len(third) != 1 || third[0].ID != "device-2" {
+		t.Fatalf("unexpected third tracked snapshot: %#v", third)
+	}
+
+	if err := <-errs; err != nil {
+		t.Fatalf("expected no tracking error, got %v", err)
+	}
+}
+
+func trackedDeviceFrame(payload string) string {
+	return fmt.Sprintf("%04x%s\n", len(payload), payload)
+}

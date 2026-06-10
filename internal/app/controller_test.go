@@ -1019,12 +1019,18 @@ func TestControllerSyncDevicesAutoSelectsFirstReadyDevice(t *testing.T) {
 	}
 }
 
-func TestControllerSyncDevicesClearsUnavailableSelection(t *testing.T) {
+func TestControllerSyncDevicesKeepsLogsAndPackageContextWhenDeviceBecomesUnavailable(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{
 			install: adb.Install{Path: "adb", Version: "1.0.41"},
 			devices: []adb.DeviceInfo{
 				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+			packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+				adb.PackageScopeAll: {{Name: "com.demo.host"}},
+			},
+			processesByPackage: map[string][]adb.ProcessInfo{
+				"com.demo.host": {{PID: 111, Name: "com.demo.host"}},
 			},
 		},
 		stubSessionStarter{},
@@ -1036,6 +1042,11 @@ func TestControllerSyncDevicesClearsUnavailableSelection(t *testing.T) {
 	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
 		t.Fatalf("SelectDevice returned error: %v", err)
 	}
+	controller.ResumeKeep()
+	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
+		t.Fatalf("SelectPackage returned error: %v", err)
+	}
+	controller.pushEntry(*makeEntry("[H5] keep me"))
 	if err := controller.syncDevices(context.Background(), nil); err != nil {
 		t.Fatalf("syncDevices returned error: %v", err)
 	}
@@ -1044,11 +1055,89 @@ func TestControllerSyncDevicesClearsUnavailableSelection(t *testing.T) {
 	if model.SelectedDevice != "" {
 		t.Fatalf("expected selected device cleared, got %q", model.SelectedDevice)
 	}
-	if len(model.Packages) != 0 {
-		t.Fatalf("expected packages cleared, got %#v", model.Packages)
+	if model.SelectedPackage != "com.demo.host" {
+		t.Fatalf("expected package selection kept, got %q", model.SelectedPackage)
+	}
+	if len(model.Packages) != 1 || model.Packages[0].Name != "com.demo.host" {
+		t.Fatalf("expected package options kept, got %#v", model.Packages)
 	}
 	if len(model.BoundPIDs) != 0 {
 		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)
+	}
+	if model.TotalLogs != 1 || len(model.VisibleLogs) != 1 {
+		t.Fatalf("expected logs kept, got total=%d visible=%d", model.TotalLogs, len(model.VisibleLogs))
+	}
+	if model.VisibleLogs[0].Entry.Message != "[H5] keep me" {
+		t.Fatalf("expected kept log message, got %q", model.VisibleLogs[0].Entry.Message)
+	}
+	if !model.Pause.Active {
+		t.Fatal("expected pause active after disconnect")
+	}
+}
+
+func TestControllerSyncDevicesRestoresPackageContextAcrossReplacementDevice(t *testing.T) {
+	packages := []adb.PackageInfo{{Name: "com.demo.host"}}
+	processesByPackage := map[string][]adb.ProcessInfo{
+		"com.demo.host": {{PID: 111, Name: "com.demo.host"}},
+	}
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+			listPackagesFunc: func(adb.PackageScope) ([]adb.PackageInfo, error) {
+				return append([]adb.PackageInfo(nil), packages...), nil
+			},
+			listProcessesFunc: func(packageName string) ([]adb.ProcessInfo, error) {
+				return append([]adb.ProcessInfo(nil), processesByPackage[packageName]...), nil
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	controller.ResumeKeep()
+	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
+		t.Fatalf("SelectPackage returned error: %v", err)
+	}
+	controller.pushEntry(*makeEntry("[H5] keep me"))
+	if err := controller.syncDevices(context.Background(), nil); err != nil {
+		t.Fatalf("syncDevices returned error: %v", err)
+	}
+
+	packages = []adb.PackageInfo{{Name: "com.other.app"}}
+	processesByPackage = map[string][]adb.ProcessInfo{}
+	err := controller.syncDevices(context.Background(), []adb.DeviceInfo{
+		{ID: "device-2", Model: "SM_A217F", Status: "device"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "app_not_running: com.demo.host") {
+		t.Fatalf("expected package restore not-running error, got %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedDevice != "device-2" {
+		t.Fatalf("expected replacement device selected, got %q", model.SelectedDevice)
+	}
+	if model.SelectedPackage != "com.demo.host" {
+		t.Fatalf("expected package selection restored, got %q", model.SelectedPackage)
+	}
+	if len(model.Packages) != 1 || model.Packages[0].Name != "com.other.app" {
+		t.Fatalf("expected refreshed package list from replacement device, got %#v", model.Packages)
+	}
+	if model.TotalLogs != 1 || len(model.VisibleLogs) != 1 {
+		t.Fatalf("expected logs preserved across replacement device, got total=%d visible=%d", model.TotalLogs, len(model.VisibleLogs))
+	}
+	if len(model.BoundPIDs) != 0 {
+		t.Fatalf("expected no bound pids after missing package process, got %#v", model.BoundPIDs)
+	}
+	if model.Pause.Active {
+		t.Fatal("expected running intent kept for watcher-based auto resume")
 	}
 }
 
@@ -1178,6 +1267,66 @@ func TestControllerRebindsWhenProcessPIDChanges(t *testing.T) {
 	}
 	if len(latest.AllowedPIDs) != 1 || latest.AllowedPIDs[0] != 222 {
 		t.Fatalf("unexpected rebound allowed pids: %#v", latest.AllowedPIDs)
+	}
+}
+
+func TestControllerWatcherRestartsSessionWhenPackageProcessReturns(t *testing.T) {
+	starter := &recordingSessionStarter{}
+	calls := 0
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+			},
+			listProcessesFunc: func(packageName string) ([]adb.ProcessInfo, error) {
+				if packageName != "com.demo.host" {
+					return nil, nil
+				}
+				calls++
+				switch calls {
+				case 1:
+					return []adb.ProcessInfo{{PID: 111, Name: "com.demo.host"}}, nil
+				case 2:
+					return nil, nil
+				default:
+					return []adb.ProcessInfo{{PID: 222, Name: "com.demo.host"}}, nil
+				}
+			},
+		},
+		starter,
+	)
+	controller.bindingPollInterval = 10 * time.Millisecond
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+	controller.ResumeKeep()
+	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
+		t.Fatalf("SelectPackage returned error: %v", err)
+	}
+
+	waitFor(t, func() bool {
+		model := controller.Model()
+		return len(model.BoundPIDs) == 1 && model.BoundPIDs[0] == 222
+	})
+
+	starter.mu.Lock()
+	configCount := len(starter.configs)
+	latest := starter.configs[configCount-1]
+	starter.mu.Unlock()
+
+	if configCount != 3 {
+		t.Fatalf("expected device + package + restart sessions, got %d", configCount)
+	}
+	if len(latest.AllowedPIDs) != 1 || latest.AllowedPIDs[0] != 222 {
+		t.Fatalf("unexpected restarted allowed pids: %#v", latest.AllowedPIDs)
+	}
+	if strings.Contains(controller.Model().Status, "app_not_running") {
+		t.Fatalf("expected session resumed after process returned, got status %q", controller.Model().Status)
 	}
 }
 

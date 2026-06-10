@@ -160,11 +160,8 @@ func (c *Controller) clearUnavailableDeviceSelection() {
 
 	c.rememberCurrentBindingLocked()
 	c.binding = SessionBinding{}
-	c.clearBindingViewLocked()
+	c.resetBindingViewLocked(false)
 	c.model.SelectedDevice = ""
-	c.model.PackageScope = adb.PackageScopeAll
-	c.model.Packages = c.model.Packages[:0]
-	c.model.SelectedPackage = ""
 	c.model.Processes = c.model.Processes[:0]
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]

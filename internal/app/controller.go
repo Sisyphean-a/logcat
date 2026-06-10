@@ -152,15 +152,20 @@ func (c *Controller) selectDevice(
 	if restoreBinding {
 		pendingBinding = c.pendingBindingForDevice(deviceID)
 	}
+	preservePackageContext := restoreBinding && pendingBinding.PackageName != ""
 
 	c.stopWatcher()
 	c.mu.Lock()
 	c.binding = SessionBinding{DeviceID: deviceID}
 	c.rememberBindingLocked(c.binding)
-	c.model.PackageScope = adb.PackageScopeAll
+	if !restoreBinding {
+		c.model.PackageScope = adb.PackageScopeAll
+	}
 	c.model.SelectedDevice = deviceID
-	c.model.Packages = c.model.Packages[:0]
-	c.model.SelectedPackage = ""
+	if !preservePackageContext {
+		c.model.Packages = c.model.Packages[:0]
+		c.model.SelectedPackage = ""
+	}
 	c.model.Processes = c.model.Processes[:0]
 	c.model.SelectedProcess = ""
 	c.model.BoundPIDs = c.model.BoundPIDs[:0]
@@ -171,12 +176,12 @@ func (c *Controller) selectDevice(
 	if err := c.RefreshPackages(ctx); err != nil {
 		return err
 	}
-	if restoreBinding && pendingBinding.PackageName != "" {
-		if err := c.SelectPackage(ctx, pendingBinding.PackageName); err != nil {
+	if preservePackageContext {
+		if err := c.selectPackage(ctx, pendingBinding.PackageName, true); err != nil {
 			return err
 		}
 		if pendingBinding.ProcessName != "" {
-			if err := c.SelectProcess(ctx, pendingBinding.ProcessName); err != nil {
+			if err := c.selectProcess(ctx, pendingBinding.ProcessName, true); err != nil {
 				return err
 			}
 		}

@@ -11,6 +11,11 @@
   align-items: center;
 }
 
+.table-row > .message-cell {
+  display: block;
+  min-height: auto;
+}
+
 .table-head-cell {
   position: relative;
   padding-right: 10px;

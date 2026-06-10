@@ -43,6 +43,7 @@ func (c *Controller) prepareBindingSelection(
 	processName string,
 	processes []adb.ProcessInfo,
 	pids []int,
+	preserveLogs bool,
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -54,7 +55,7 @@ func (c *Controller) prepareBindingSelection(
 		PIDs:        append([]int(nil), pids...),
 	}
 	c.rememberBindingLocked(c.binding)
-	c.clearBindingViewLocked()
+	c.resetBindingViewLocked(!preserveLogs)
 	c.model.Pause.Active = true
 	c.updateBoundModelLocked(packageName, processName, processes, pids)
 }
@@ -64,6 +65,7 @@ func (c *Controller) prepareStoppedBinding(
 	packageName string,
 	processName string,
 	processes []adb.ProcessInfo,
+	preserveLogs bool,
 ) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -74,7 +76,7 @@ func (c *Controller) prepareStoppedBinding(
 		ProcessName: processName,
 	}
 	c.rememberBindingLocked(c.binding)
-	c.clearBindingViewLocked()
+	c.resetBindingViewLocked(!preserveLogs)
 	c.model.Pause.Active = true
 	c.updateBoundModelLocked(packageName, processName, processes, nil)
 	return notRunningError(packageName, processName)

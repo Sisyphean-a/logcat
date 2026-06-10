@@ -360,8 +360,20 @@ button:disabled {
 }
 
 .select-control .chevron {
+  position: static;
+  color: inherit;
+}
+
+.select-control-arrow {
   position: absolute;
+  top: 50%;
   right: 9px;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
   color: var(--text-muted);
   pointer-events: none;
 }
@@ -655,6 +667,7 @@ button:disabled {
 
 .message-cell {
   color: #d9e0ea;
+  display: block;
 }
 
 .token-url {

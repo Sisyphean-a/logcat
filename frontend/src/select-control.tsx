@@ -34,21 +34,27 @@ export function SelectControl({
   const [minWidth, setMinWidth] = useState<number>();
   const [keyword, setKeyword] = useState("");
 
+  const normalizedOptions = useMemo(() => {
+    if (!value || options.some((item) => item.value === value)) {
+      return options;
+    }
+    return [{ value, label: value, tone: "accent" as const }, ...options];
+  }, [options, value]);
   const selected = useMemo(
-    () => options.find((item) => item.value === value),
-    [options, value],
+    () => normalizedOptions.find((item) => item.value === value),
+    [normalizedOptions, value],
   );
   const display = selected?.label || emptyLabel;
   const filteredOptions = useMemo(() => {
     if (!filterable) {
-      return options;
+      return normalizedOptions;
     }
     const normalized = keyword.trim().toLowerCase();
     if (!normalized) {
-      return options;
+      return normalizedOptions;
     }
-    return options.filter((item) => item.label.toLowerCase().includes(normalized));
-  }, [filterable, keyword, options]);
+    return normalizedOptions.filter((item) => item.label.toLowerCase().includes(normalized));
+  }, [filterable, keyword, normalizedOptions]);
 
   useLayoutEffect(() => {
     const measure = measureTextRef.current;
@@ -59,7 +65,7 @@ export function SelectControl({
 
     const width = Math.max(measure.offsetWidth, triggerText.offsetWidth);
     setMinWidth(Math.ceil(width + 54));
-  }, [display, options]);
+  }, [display, normalizedOptions]);
 
   useEffect(() => {
     if (!open) {
@@ -132,7 +138,7 @@ export function SelectControl({
       ) : null}
 
       <span ref={measureTextRef} className="select-control-measure">
-        {longestLabel(options, emptyLabel)}
+        {longestLabel(normalizedOptions, emptyLabel)}
       </span>
 
       {open ? (
