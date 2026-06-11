@@ -63,7 +63,7 @@ func TestSaveAndLoadFilterState(t *testing.T) {
 		{ID: "h5", Name: "H5 日志", Query: "tag:chromium & message:[H5]"},
 	}
 	history := []string{"level:E", "tag:chromium"}
-	if err := SaveFilterState(filters, history); err != nil {
+	if err := SaveFilterState(filters, history, "h5"); err != nil {
 		t.Fatalf("SaveFilterState returned error: %v", err)
 	}
 
@@ -76,6 +76,9 @@ func TestSaveAndLoadFilterState(t *testing.T) {
 	}
 	if len(state.History) != 2 || state.History[0] != "level:E" {
 		t.Fatalf("unexpected history: %#v", state.History)
+	}
+	if state.DefaultFilterID != "h5" {
+		t.Fatalf("unexpected default filter id: %#v", state.DefaultFilterID)
 	}
 
 	path, err := filtersPath()
@@ -92,5 +95,8 @@ func TestSaveAndLoadFilterState(t *testing.T) {
 	}
 	if len(payload.History) != 2 {
 		t.Fatalf("expected persisted history, got %#v", payload)
+	}
+	if payload.DefaultFilterID != "h5" {
+		t.Fatalf("expected persisted default filter id, got %#v", payload)
 	}
 }

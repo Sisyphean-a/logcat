@@ -149,9 +149,13 @@ func (c *Controller) selectDevice(
 
 	intent := c.currentSessionIntent()
 	pendingBinding := SessionBinding{}
+	activeFilterID := ""
 	if restoreBinding {
 		pendingBinding = c.pendingBindingForDevice(deviceID)
 	}
+	c.mu.RLock()
+	activeFilterID = c.model.Filter.ActiveFilterID
+	c.mu.RUnlock()
 	preservePackageContext := restoreBinding && pendingBinding.PackageName != ""
 
 	c.stopWatcher()
@@ -175,6 +179,9 @@ func (c *Controller) selectDevice(
 
 	if err := c.RefreshPackages(ctx); err != nil {
 		return err
+	}
+	if !preservePackageContext && c.SavedFilterPackageName(activeFilterID) != "" {
+		return c.ApplySavedFilter(ctx, activeFilterID)
 	}
 	if preservePackageContext {
 		if err := c.selectPackage(ctx, pendingBinding.PackageName, true); err != nil {

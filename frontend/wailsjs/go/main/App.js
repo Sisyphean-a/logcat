@@ -42,6 +42,10 @@ export function PrevMatch() {
   return window['go']['main']['App']['PrevMatch']();
 }
 
+export function ReplaceSavedFilterDefinitions(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ReplaceSavedFilterDefinitions'](arg1, arg2, arg3);
+}
+
 export function ResumeDiscard() {
   return window['go']['main']['App']['ResumeDiscard']();
 }

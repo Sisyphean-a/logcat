@@ -106,6 +106,21 @@ func (a *App) UpdateSavedFilterDefinition(existingID string, name string, packag
 	})
 }
 
+func (a *App) ReplaceSavedFilterDefinitions(
+	drafts []appstate.SavedFilterDraft,
+	defaultFilterID string,
+	activeFilterID string,
+) error {
+	return a.runAction(func() error {
+		return a.controller.ReplaceSavedFilterDefinitions(
+			context.Background(),
+			drafts,
+			defaultFilterID,
+			activeFilterID,
+		)
+	})
+}
+
 func (a *App) Pause() AppState {
 	a.controller.Pause()
 	return a.emitAndSnapshot()
@@ -211,7 +226,7 @@ func (a *App) runAction(action func() error) error {
 
 func (a *App) persistFilters() {
 	filter := a.controller.FilterStateSnapshot()
-	_ = storage.SaveFilterState(filter.Saved, filter.History)
+	_ = storage.SaveFilterState(filter.Saved, filter.History, filter.DefaultFilterID)
 }
 
 func (a *App) emitState() {

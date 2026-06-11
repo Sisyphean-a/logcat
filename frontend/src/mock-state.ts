@@ -29,6 +29,7 @@ export function createMockState() {
       applied: `message~:"submit" && -level:I`,
       error: "",
       activeFilterId: "submit-errors",
+      defaultFilterId: "bridge-h5",
       saved: [
         {
           id: "bridge-h5",

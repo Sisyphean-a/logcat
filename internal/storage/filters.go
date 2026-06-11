@@ -9,8 +9,9 @@ import (
 )
 
 type SavedFiltersFile struct {
-	Filters []appstate.SavedFilter `json:"filters"`
-	History []string               `json:"history,omitempty"`
+	Filters         []appstate.SavedFilter `json:"filters"`
+	History         []string               `json:"history,omitempty"`
+	DefaultFilterID string                 `json:"defaultFilterId,omitempty"`
 }
 
 func LoadFilterState() (SavedFiltersFile, error) {
@@ -42,7 +43,7 @@ func LoadSavedFilters() ([]appstate.SavedFilter, error) {
 	return payload.Filters, nil
 }
 
-func SaveFilterState(filters []appstate.SavedFilter, history []string) error {
+func SaveFilterState(filters []appstate.SavedFilter, history []string, defaultFilterID string) error {
 	path, err := filtersPath()
 	if err != nil {
 		return err
@@ -52,8 +53,9 @@ func SaveFilterState(filters []appstate.SavedFilter, history []string) error {
 	}
 
 	content, err := json.MarshalIndent(SavedFiltersFile{
-		Filters: filters,
-		History: history,
+		Filters:         filters,
+		History:         history,
+		DefaultFilterID: defaultFilterID,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -62,7 +64,7 @@ func SaveFilterState(filters []appstate.SavedFilter, history []string) error {
 }
 
 func SaveSavedFilters(filters []appstate.SavedFilter) error {
-	return SaveFilterState(filters, nil)
+	return SaveFilterState(filters, nil, "")
 }
 
 func filtersPath() (string, error) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
-import { main } from "../wailsjs/go/models";
+import { app, main } from "../wailsjs/go/models";
 import { createMockState } from "./mock-state";
 import {
   ApplyFilterDraft,
@@ -10,6 +10,7 @@ import {
   ExportVisibleLogs,
   GetState,
   Pause,
+  ReplaceSavedFilterDefinitions,
   ResumeKeep,
   SaveFilterDefinition,
   SelectDevice,
@@ -20,6 +21,7 @@ import {
   UpdateSavedFilterDefinition,
 } from "../wailsjs/go/main/App";
 import { type SaveFilterDraft } from "./filter-rule-builder";
+import { type SavedFiltersDraft } from "./saved-filter-types";
 
 export type AppState = main.AppState;
 
@@ -151,6 +153,18 @@ export function useAppController() {
           setActionError,
         );
       },
+      replaceSavedFilters: async (draft: SavedFiltersDraft) => {
+        const payload = draft.filters.map((filter) => new app.SavedFilterDraft({
+          ExistingID: filter.existingID,
+          Name: filter.name,
+          PackageName: filter.packageName,
+          Query: filter.query,
+        }));
+        await withAction(
+          () => ReplaceSavedFilterDefinitions(payload, draft.defaultFilterID, draft.activeFilterID),
+          setActionError,
+        );
+      },
     } : createPreviewApi(state, setState, setActionError)),
     [state],
   );
@@ -245,6 +259,7 @@ const emptyState = new main.AppState({
     applied: "",
     error: "",
     activeFilterId: "",
+    defaultFilterId: "",
     saved: [],
     history: [],
   },
@@ -381,6 +396,45 @@ function createPreviewApi(
       setState(next);
       setError("");
     },
+    replaceSavedFilters: async (draft: SavedFiltersDraft) => {
+      const next = main.AppState.createFrom(state);
+      const renamedIDs = new Map<string, string>();
+      next.filter.saved = draft.filters.map((filter) => {
+        const id = filter.name.trim().toLowerCase().replaceAll(" ", "-");
+        renamedIDs.set(filter.existingID, id);
+        return {
+          id,
+          name: filter.name.trim(),
+          packageName: filter.packageName.trim(),
+          query: filter.query.trim(),
+        };
+      });
+      next.filter.defaultFilterId = resolvePreviewFilterID(
+        draft.defaultFilterID,
+        next.filter.saved,
+        renamedIDs,
+      );
+      next.filter.activeFilterId = resolvePreviewFilterID(
+        draft.activeFilterID,
+        next.filter.saved,
+        renamedIDs,
+      );
+
+      const selected = next.filter.saved.find((filter) => filter.id === next.filter.activeFilterId);
+      if (selected) {
+        next.filter.draft = selected.query;
+        next.filter.applied = selected.query;
+        next.selectedPackage = selected.packageName;
+      }
+      if (!selected && next.filter.saved.length === 0) {
+        next.filter.draft = "";
+        next.filter.applied = "";
+        next.selectedPackage = "";
+      }
+
+      setState(next);
+      setError("");
+    },
   };
 }
 
@@ -392,4 +446,13 @@ function upsertPreviewFilter(filters: main.SavedFilterView[], nextFilter: main.S
   const next = [...filters];
   next[index] = nextFilter;
   return next;
+}
+
+function resolvePreviewFilterID(
+  existingID: string,
+  filters: main.SavedFilterView[],
+  renamedIDs: Map<string, string>,
+) {
+  const nextID = renamedIDs.get(existingID) || "";
+  return filters.some((filter) => filter.id === nextID) ? nextID : "";
 }

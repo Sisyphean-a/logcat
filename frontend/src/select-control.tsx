@@ -9,6 +9,7 @@ export type SelectOption = {
 
 type SelectControlProps = {
   className?: string;
+  clearable?: boolean;
   emptyLabel: string;
   filterable?: boolean;
   leading?: React.ReactNode;
@@ -19,6 +20,7 @@ type SelectControlProps = {
 
 export function SelectControl({
   className = "",
+  clearable = true,
   emptyLabel,
   filterable = false,
   leading,
@@ -119,11 +121,11 @@ export function SelectControl({
         >
           {display}
         </span>
-        <span className={`select-control-arrow ${value ? "hidden" : ""}`}>
+        <span className={`select-control-arrow ${clearable && value ? "hidden" : ""}`}>
           <span className="chevron"><ChevronDownIcon /></span>
         </span>
       </button>
-      {value ? (
+      {clearable && value ? (
         <button
           className="select-control-clear"
           type="button"

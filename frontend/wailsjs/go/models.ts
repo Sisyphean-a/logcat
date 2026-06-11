@@ -1,3 +1,26 @@
+export namespace app {
+	
+	export class SavedFilterDraft {
+	    ExistingID: string;
+	    Name: string;
+	    PackageName: string;
+	    Query: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SavedFilterDraft(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ExistingID = source["ExistingID"];
+	        this.Name = source["Name"];
+	        this.PackageName = source["PackageName"];
+	        this.Query = source["Query"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class SelectedLogView {
@@ -113,6 +136,7 @@ export namespace main {
 	    applied: string;
 	    error: string;
 	    activeFilterId: string;
+	    defaultFilterId: string;
 	    saved: SavedFilterView[];
 	    history: string[];
 	
@@ -126,6 +150,7 @@ export namespace main {
 	        this.applied = source["applied"];
 	        this.error = source["error"];
 	        this.activeFilterId = source["activeFilterId"];
+	        this.defaultFilterId = source["defaultFilterId"];
 	        this.saved = this.convertValues(source["saved"], SavedFilterView);
 	        this.history = source["history"];
 	    }

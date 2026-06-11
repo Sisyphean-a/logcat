@@ -46,6 +46,7 @@ export function Toolbar({
       />
       <SelectControl
         className="toolbar-scope"
+        clearable={false}
         emptyLabel="全部包"
         onChange={onSetPackageScope}
         options={buildScopeOptions()}

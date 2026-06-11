@@ -16,17 +16,6 @@ func (c *Controller) SetFilterDraft(query string) {
 	c.markDirtyLocked()
 }
 
-func (c *Controller) ReplaceSavedFilters(filters []SavedFilter) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.model.Filter.Saved = append(c.model.Filter.Saved[:0], filters...)
-	if _, ok := findSavedFilter(c.model.Filter.Saved, c.model.Filter.ActiveFilterID); !ok {
-		c.model.Filter.ActiveFilterID = ""
-	}
-	c.rebuildVisibleFromAllLogsLocked()
-}
-
 func (c *Controller) ApplyFilterDraft() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -146,11 +135,20 @@ func (c *Controller) UpdateSavedFilterDefinition(
 
 	c.mu.Lock()
 	c.model.Filter.Saved = replaceSavedFilter(c.model.Filter.Saved, existingID, saved)
+	switch {
+	case c.model.Filter.DefaultFilterID == existingID:
+		c.model.Filter.DefaultFilterID = saved.ID
+	default:
+		c.model.Filter.DefaultFilterID = normalizeSavedFilterID(
+			c.model.Filter.DefaultFilterID,
+			c.model.Filter.Saved,
+		)
+	}
 	c.model.Filter.Error = ""
 	c.markDirtyLocked()
 	c.mu.Unlock()
 
-	return c.ApplySavedFilter(ctx, saved.ID)
+	return c.applySelectedSavedFilter(ctx, saved.ID)
 }
 
 func (c *Controller) applyFilterQueryLocked(query string, recordHistory bool) error {

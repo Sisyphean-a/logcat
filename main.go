@@ -27,10 +27,13 @@ func main() {
 	if state, err := storage.LoadFilterState(); err == nil {
 		filters := stripBuiltinFilters(state.Filters)
 		if len(filters) > 0 || len(state.Filters) > 0 {
-			controller.ReplaceSavedFilters(filters)
+			controller.ReplaceSavedFilters(filters, state.DefaultFilterID)
 		}
 		if len(state.History) > 0 {
 			controller.ReplaceFilterHistory(state.History)
+		}
+		if filterState := controller.FilterStateSnapshot(); filterState.DefaultFilterID != "" {
+			_ = controller.RestoreSavedFilter(filterState.DefaultFilterID)
 		}
 	}
 

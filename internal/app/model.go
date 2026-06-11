@@ -25,12 +25,13 @@ type LogViewItem struct {
 }
 
 type FilterState struct {
-	Draft          string
-	Applied        string
-	Error          string
-	ActiveFilterID string
-	Saved          []SavedFilter
-	History        []string
+	Draft           string
+	Applied         string
+	Error           string
+	ActiveFilterID  string
+	DefaultFilterID string
+	Saved           []SavedFilter
+	History         []string
 }
 
 type SearchState struct {
@@ -79,10 +80,11 @@ func NewModel() Model {
 		TotalLogs:       0,
 		VisibleLogs:     []LogViewItem{},
 		Filter: FilterState{
-			Draft:          "",
-			Applied:        "",
-			ActiveFilterID: "",
-			Saved:          []SavedFilter{},
+			Draft:           "",
+			Applied:         "",
+			ActiveFilterID:  "",
+			DefaultFilterID: "",
+			Saved:           []SavedFilter{},
 		},
 		Search:        SearchState{MatchIndexes: []int{}, Current: -1},
 		Pause:         PauseState{Active: true},

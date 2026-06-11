@@ -1,8 +1,8 @@
 package main
 
 import (
-	appstate "github.com/xiakn/logcat/internal/app"
 	"github.com/xiakn/logcat/internal/adb"
+	appstate "github.com/xiakn/logcat/internal/app"
 )
 
 type AppState struct {
@@ -43,12 +43,13 @@ type ProcessView struct {
 }
 
 type FilterView struct {
-	Draft          string            `json:"draft"`
-	Applied        string            `json:"applied"`
-	Error          string            `json:"error"`
-	ActiveFilterID string            `json:"activeFilterId"`
-	Saved          []SavedFilterView `json:"saved"`
-	History        []string          `json:"history"`
+	Draft           string            `json:"draft"`
+	Applied         string            `json:"applied"`
+	Error           string            `json:"error"`
+	ActiveFilterID  string            `json:"activeFilterId"`
+	DefaultFilterID string            `json:"defaultFilterId"`
+	Saved           []SavedFilterView `json:"saved"`
+	History         []string          `json:"history"`
 }
 
 type SavedFilterView struct {
@@ -71,17 +72,17 @@ type PauseView struct {
 }
 
 type LogItemView struct {
-	Index     int    `json:"index"`
-	TimeText  string `json:"timeText"`
-	Level     string `json:"level"`
-	Tag       string `json:"tag"`
-	Message   string `json:"message"`
-	Source    string `json:"source"`
-	Raw       string `json:"raw"`
-	Display   string `json:"display"`
-	IsMatch   bool   `json:"isMatch"`
-	IsCurrent bool   `json:"isCurrent"`
-	IsSelected bool  `json:"isSelected"`
+	Index      int    `json:"index"`
+	TimeText   string `json:"timeText"`
+	Level      string `json:"level"`
+	Tag        string `json:"tag"`
+	Message    string `json:"message"`
+	Source     string `json:"source"`
+	Raw        string `json:"raw"`
+	Display    string `json:"display"`
+	IsMatch    bool   `json:"isMatch"`
+	IsCurrent  bool   `json:"isCurrent"`
+	IsSelected bool   `json:"isSelected"`
 }
 
 type SelectedLogView struct {
@@ -113,12 +114,13 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		VisibleStart:    snapshot.VisibleStart,
 		SelectedIndex:   model.SelectedIndex,
 		Filter: FilterView{
-			Draft:          model.Filter.Draft,
-			Applied:        model.Filter.Applied,
-			Error:          model.Filter.Error,
-			ActiveFilterID: model.Filter.ActiveFilterID,
-			Saved:          make([]SavedFilterView, 0, len(model.Filter.Saved)),
-			History:        append([]string(nil), model.Filter.History...),
+			Draft:           model.Filter.Draft,
+			Applied:         model.Filter.Applied,
+			Error:           model.Filter.Error,
+			ActiveFilterID:  model.Filter.ActiveFilterID,
+			DefaultFilterID: model.Filter.DefaultFilterID,
+			Saved:           make([]SavedFilterView, 0, len(model.Filter.Saved)),
+			History:         append([]string(nil), model.Filter.History...),
 		},
 		Search: SearchView{
 			Query:        model.Search.Query,

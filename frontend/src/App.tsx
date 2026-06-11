@@ -2,17 +2,21 @@ import { useState } from "react";
 import { DetailPanel, FilterBar, StatusBar } from "./app-shell";
 import { suggestFilterName } from "./filter-rule-builder";
 import { LogTable } from "./log-table";
-import { type FilterDialogDraft, SaveFilterDialog } from "./save-filter-dialog";
+import { SaveFilterDialog } from "./save-filter-dialog";
+import { SavedFiltersDialog } from "./saved-filters-dialog";
+import { type SavedFiltersDraft } from "./saved-filter-types";
 import { SettingsDialog } from "./settings-dialog";
 import { Toolbar } from "./toolbar";
 import { useAppController } from "./use-app-controller";
 import { useViewSettings } from "./view-settings";
 
 export default function App() {
-  const [filterDialogMode, setFilterDialogMode] = useState<"create" | "edit">("create");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogBusy, setSaveDialogBusy] = useState(false);
   const [saveDialogError, setSaveDialogError] = useState("");
+  const [manageDialogOpen, setManageDialogOpen] = useState(false);
+  const [manageDialogBusy, setManageDialogBusy] = useState(false);
+  const [manageDialogError, setManageDialogError] = useState("");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const { settings, shellStyle, updateSetting, resetSettings } = useViewSettings();
   const {
@@ -29,17 +33,12 @@ export default function App() {
     handleScroll,
     api,
   } = useAppController();
-  const activeFilter = state.filter.saved.find((item) => item.id === state.filter.activeFilterId);
 
-  async function handleSaveFilter(draft: FilterDialogDraft) {
+  async function handleSaveFilter(draft: { name: string; packageName: string; query: string }) {
     setSaveDialogBusy(true);
     setSaveDialogError("");
     try {
-      if (draft.existingID) {
-        await api.updateFilter(draft.existingID, draft);
-      } else {
-        await api.saveFilter(draft);
-      }
+      await api.saveFilter(draft);
       setSaveDialogOpen(false);
     } catch (error) {
       setSaveDialogError(String(error));
@@ -48,25 +47,36 @@ export default function App() {
     }
   }
 
+  async function handleManageFilters(draft: SavedFiltersDraft) {
+    setManageDialogBusy(true);
+    setManageDialogError("");
+    try {
+      await api.replaceSavedFilters(draft);
+      setManageDialogOpen(false);
+    } catch (error) {
+      setManageDialogError(String(error));
+    } finally {
+      setManageDialogBusy(false);
+    }
+  }
+
   async function openCreateFilterDialog(query: string) {
     await api.setFilterDraft(query);
     setSaveDialogError("");
-    setFilterDialogMode("create");
     setSaveDialogOpen(true);
   }
 
   return (
     <div className="app-shell" style={shellStyle}>
       <Toolbar
-        canEditSavedFilter={Boolean(activeFilter)}
+        canEditSavedFilter={state.filter.saved.length > 0}
         state={state}
         onEditSavedFilter={() => {
-          if (!activeFilter) {
+          if (state.filter.saved.length === 0) {
             return;
           }
-          setSaveDialogError("");
-          setFilterDialogMode("edit");
-          setSaveDialogOpen(true);
+          setManageDialogError("");
+          setManageDialogOpen(true);
         }}
         onSelectDevice={(deviceID) => void api.selectDevice(deviceID)}
         onSetPackageScope={(scope) => void api.setPackageScope(scope)}
@@ -118,13 +128,9 @@ export default function App() {
       />
       <SaveFilterDialog
         errorMessage={saveDialogError}
-        initialFilterID={filterDialogMode === "edit" ? activeFilter?.id : undefined}
-        initialName={filterDialogMode === "edit"
-          ? activeFilter?.name || suggestFilterName(state.selectedPackage, state.filter.draft)
-          : suggestFilterName(state.selectedPackage, state.filter.draft)}
-        initialPackageName={filterDialogMode === "edit" ? activeFilter?.packageName || "" : state.selectedPackage}
-        initialQuery={filterDialogMode === "edit" ? activeFilter?.query || state.filter.draft : state.filter.draft}
-        mode={filterDialogMode}
+        initialName={suggestFilterName(state.selectedPackage, state.filter.draft)}
+        initialPackageName={state.selectedPackage}
+        initialQuery={state.filter.draft}
         open={saveDialogOpen}
         packageOptions={state.packages.map((pkg) => pkg.name)}
         saving={saveDialogBusy}
@@ -134,6 +140,21 @@ export default function App() {
           }
         }}
         onSubmit={handleSaveFilter}
+      />
+      <SavedFiltersDialog
+        defaultFilterID={state.filter.defaultFilterId}
+        errorMessage={manageDialogError}
+        initialFilterID={pickManagedFilterID(state)}
+        open={manageDialogOpen}
+        packageOptions={state.packages.map((pkg) => pkg.name)}
+        savedFilters={state.filter.saved}
+        saving={manageDialogBusy}
+        onClose={() => {
+          if (!manageDialogBusy) {
+            setManageDialogOpen(false);
+          }
+        }}
+        onSubmit={handleManageFilters}
       />
       <SettingsDialog
         open={settingsDialogOpen}
@@ -163,4 +184,8 @@ function displayStatus(actionError: string, filterError: string, status: string)
       }
       return status;
   }
+}
+
+function pickManagedFilterID(state: ReturnType<typeof useAppController>["state"]) {
+  return state.filter.activeFilterId || state.filter.defaultFilterId || state.filter.saved[0]?.id;
 }
