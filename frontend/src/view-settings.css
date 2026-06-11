@@ -1,0 +1,123 @@
+.app-shell {
+  --toolbar-font-size: 11px;
+  --filter-font-size: 11px;
+  --detail-font-size: 11px;
+  --status-font-size: 10px;
+}
+
+.toolbar .brand-title,
+.toolbar .select-control-trigger,
+.toolbar .select-control-option,
+.toolbar .ghost-button,
+.toolbar .icon-button {
+  font-size: var(--toolbar-font-size);
+}
+
+.toolbar .select-control-search input,
+.filter-bar .select-control-trigger,
+.filter-bar .select-control-option,
+.filter-bar .select-control-search input,
+.filter-bar .filter-input input,
+.filter-bar .text-button,
+.filter-bar .switch-label {
+  font-size: var(--filter-font-size);
+}
+
+.table-shell {
+  --table-font-size: 11px;
+  --table-row-height: 26px;
+  --table-head-height: 29px;
+  --table-chip-size: 10px;
+  --table-chip-box: 18px;
+}
+
+.table-head,
+.table-row {
+  font-size: var(--table-font-size);
+}
+
+.table-head {
+  height: var(--table-head-height);
+}
+
+.table-row {
+  min-height: var(--table-row-height);
+}
+
+.level-chip {
+  width: var(--table-chip-box);
+  height: var(--table-chip-box);
+  font-size: var(--table-chip-size);
+}
+
+.detail-header,
+.detail-grid dt,
+.detail-grid dd,
+.detail-title,
+.detail-actions .ghost-button,
+.detail-empty,
+.detail-inline-empty,
+.detail-url-label,
+.detail-rich-text,
+.detail-json-tree {
+  font-size: var(--detail-font-size);
+}
+
+.detail-rich-text,
+.detail-inline-empty,
+.detail-grid dd,
+.detail-json-tree {
+  line-height: 1.5;
+}
+
+.status-bar {
+  height: calc(var(--status-font-size) + 10px);
+}
+
+.status-bar,
+.status-item {
+  font-size: var(--status-font-size);
+}
+
+.settings-dialog-card {
+  width: min(560px, 100%);
+}
+
+.settings-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-value {
+  color: #eef4ff;
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+
+.settings-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.settings-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.settings-actions {
+  justify-content: flex-end;
+}

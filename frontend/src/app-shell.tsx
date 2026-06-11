@@ -1,43 +1,24 @@
-import { useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { main } from "../wailsjs/go/models";
 import {
-  ClearIcon,
   DetailCollapseIcon,
-  DeviceIcon,
   DotIcon,
-  DownloadIcon,
-  PauseIcon,
-  PlayIcon,
   SaveIcon,
   SearchIcon,
-  SettingsIcon,
 } from "./icons";
 import { LogDetailView } from "./log-detail";
 import { timeOnly } from "./log-text";
-import { SelectControl, type SelectOption } from "./select-control";
+import { SelectControl } from "./select-control";
 
 export type AppState = main.AppState;
-
-type ToolbarProps = {
-  canEditSavedFilter: boolean;
-  state: AppState;
-  onEditSavedFilter: () => void;
-  onSelectDevice: (deviceID: string) => void;
-  onApplySavedFilter: (filterID: string) => void;
-  onPauseToggle: () => void;
-  onClearVisible: () => void;
-  onExport: () => void;
-};
 
 type FilterBarProps = {
   state: AppState;
   autoFollow: boolean;
   onSelectPackage: (packageName: string) => void;
-  onFilterDraftChange: (query: string) => void;
-  onApplyFilter: () => void;
-  onSetPackageScope: (scope: string) => void;
+  onApplyFilter: (query: string) => void;
   onToggleFollow: () => void;
-  onSaveFilter: () => void;
+  onSaveFilter: (query: string) => void;
 };
 
 type DetailPanelProps = {
@@ -55,86 +36,11 @@ type StatusBarProps = {
   statusText: string;
 };
 
-export function Toolbar({
-  canEditSavedFilter,
-  state,
-  onEditSavedFilter,
-  onSelectDevice,
-  onApplySavedFilter,
-  onPauseToggle,
-  onClearVisible,
-  onExport,
-}: ToolbarProps) {
-  const deviceOptions: SelectOption[] = state.devices.map((device) => ({
-    value: device.id,
-    label: device.model || device.id,
-  }));
-  const filterOptions: SelectOption[] = state.filter.saved.map((filter) => ({
-    value: filter.id,
-    label: filter.name,
-    tone: filter.id === state.filter.activeFilterId ? "accent" : "default",
-  }));
-
-  return (
-    <header className="toolbar">
-      <div className="brand">
-        <div className="brand-mark">H5</div>
-        <div className="brand-title">Logcat Viewer</div>
-      </div>
-      <div className="toolbar-sep" />
-      <SelectControl
-        className="toolbar-device"
-        emptyLabel="选择设备"
-        leading={<DeviceIcon />}
-        onChange={onSelectDevice}
-        options={deviceOptions}
-        value={state.selectedDevice}
-      />
-      <div className="toolbar-sep" />
-      <div className="toolbar-filter-group">
-        <SelectControl
-          className="toolbar-filter"
-          emptyLabel="未选择过滤器"
-          onChange={onApplySavedFilter}
-          options={filterOptions}
-          value={state.filter.activeFilterId || ""}
-        />
-        <button
-          className="ghost-button mini-button"
-          disabled={!canEditSavedFilter}
-          onClick={onEditSavedFilter}
-          type="button"
-        >
-          编辑
-        </button>
-      </div>
-      <div className="toolbar-spacer" />
-      <div className="toolbar-actions">
-        <button className="icon-button" onClick={onPauseToggle} title={state.pause.active ? "恢复" : "暂停"}>
-          {state.pause.active ? <PlayIcon /> : <PauseIcon />}
-        </button>
-        <button className="icon-button" onClick={onClearVisible} title="清空视图">
-          <ClearIcon />
-        </button>
-        <button className="icon-button" onClick={onExport} title="导出">
-          <DownloadIcon />
-        </button>
-        <div className="toolbar-mini-sep" />
-        <button className="icon-button" title="设置">
-          <SettingsIcon />
-        </button>
-      </div>
-    </header>
-  );
-}
-
 export function FilterBar({
   state,
   autoFollow,
   onSelectPackage,
-  onFilterDraftChange,
   onApplyFilter,
-  onSetPackageScope,
   onToggleFollow,
   onSaveFilter,
 }: FilterBarProps) {
@@ -142,11 +48,6 @@ export function FilterBar({
     value: pkg.name,
     label: pkg.name,
   }));
-  const scopeOptions: SelectOption[] = [
-    { value: "all", label: "全部包" },
-    { value: "user", label: "用户包" },
-    { value: "system", label: "系统包" },
-  ];
 
   return (
     <div className="filter-bar">
@@ -158,26 +59,10 @@ export function FilterBar({
         options={packageOptions}
         value={state.selectedPackage}
       />
-      <div className="filter-input">
-        <span className="filter-icon"><SearchIcon /></span>
-        <input
-          id="filter-input"
-          value={state.filter.draft}
-          onChange={(event) => onFilterDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              onApplyFilter();
-            }
-          }}
-          placeholder='tag=jsbridge || message~:"jsbridge"'
-        />
-      </div>
-      <SelectControl
-        className="scope-select"
-        emptyLabel="全部包"
-        onChange={onSetPackageScope}
-        options={scopeOptions}
-        value={state.packageScope}
+      <FilterDraftInput
+        value={state.filter.draft}
+        onApply={onApplyFilter}
+        onSave={onSaveFilter}
       />
       <div className="filter-follow">
         <button className={`switch ${autoFollow ? "switch-on" : ""}`} onClick={onToggleFollow}>
@@ -185,16 +70,57 @@ export function FilterBar({
         </button>
         <span className="switch-label">滚动</span>
       </div>
+    </div>
+  );
+}
+
+type FilterDraftInputProps = {
+  value: string;
+  onApply: (query: string) => void;
+  onSave: (query: string) => void;
+};
+
+function FilterDraftInput({ value, onApply, onSave }: FilterDraftInputProps) {
+  const [draft, setDraft] = useState(value);
+  const [isComposing, setIsComposing] = useState(false);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  function applyDraft() {
+    onApply(draft);
+  }
+
+  return (
+    <>
+      <div className="filter-input">
+        <span className="filter-icon"><SearchIcon /></span>
+        <input
+          id="filter-input"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || isComposing || event.nativeEvent.isComposing) {
+              return;
+            }
+            applyDraft();
+          }}
+          placeholder='tag=jsbridge || message~:"jsbridge"'
+        />
+      </div>
       <div className="filter-actions">
-        <button className="text-button secondary" onClick={onApplyFilter}>
+        <button className="text-button secondary" onClick={applyDraft}>
           应用
         </button>
-        <button className="text-button primary" onClick={onSaveFilter}>
+        <button className="text-button primary" onClick={() => onSave(draft)}>
           <span className="button-icon"><SaveIcon /></span>
           保存
         </button>
       </div>
-    </div>
+    </>
   );
 }
 

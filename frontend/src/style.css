@@ -234,6 +234,10 @@ button:disabled {
   max-width: 240px;
 }
 
+.toolbar-scope {
+  max-width: 120px;
+}
+
 .toolbar-filter {
   max-width: 220px;
 }
@@ -246,10 +250,6 @@ button:disabled {
 
 .package-select {
   max-width: 280px;
-}
-
-.scope-select {
-  max-width: 120px;
 }
 
 .workspace {
@@ -550,7 +550,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.text-button.secondary {
+.filter-bar .text-button.secondary {
   display: none;
 }
 
@@ -1115,6 +1115,10 @@ button:disabled {
 @media (max-width: 1120px) {
   .toolbar-device {
     max-width: 180px;
+  }
+
+  .toolbar-scope {
+    max-width: 104px;
   }
 
   .toolbar-filter {

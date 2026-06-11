@@ -4,6 +4,7 @@ import App from "./App";
 import "./style.css";
 import "./log-table.css";
 import "./filter-dialog.css";
+import "./view-settings.css";
 
 const container = document.getElementById("root");
 if (!container) {

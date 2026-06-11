@@ -115,7 +115,13 @@ export function useAppController() {
       setPackageScope: (scope: string) => withAction(() => SetPackageScope(scope), setActionError),
       setFilterDraft: (query: string) =>
         SetFilterDraft(query).then((next: AppState) => setState(main.AppState.createFrom(next))),
-      applyFilter: () => withAction(ApplyFilterDraft, setActionError),
+      applyFilter: async (query?: string) => {
+        if (query !== undefined) {
+          const next = await SetFilterDraft(query);
+          setState(main.AppState.createFrom(next));
+        }
+        await withAction(ApplyFilterDraft, setActionError);
+      },
       exportVisible: () => withAction(ExportVisibleLogs, setActionError),
       copySelected: async (kind: "display" | "raw" | "message") => {
         const selected = state.selectedLog;
@@ -294,8 +300,12 @@ function createPreviewApi(
       next.filter.draft = query;
       setState(next);
     },
-    applyFilter: async () => {
+    applyFilter: async (query?: string) => {
       const next = main.AppState.createFrom(state);
+      if (query !== undefined) {
+        next.filter.draft = query;
+      }
+      next.filter.draft = next.filter.draft.trim();
       next.filter.applied = next.filter.draft;
       setState(next);
     },

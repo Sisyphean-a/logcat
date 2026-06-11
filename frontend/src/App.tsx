@@ -1,15 +1,20 @@
 import { useState } from "react";
-import { DetailPanel, FilterBar, StatusBar, Toolbar } from "./app-shell";
+import { DetailPanel, FilterBar, StatusBar } from "./app-shell";
 import { suggestFilterName } from "./filter-rule-builder";
 import { LogTable } from "./log-table";
 import { type FilterDialogDraft, SaveFilterDialog } from "./save-filter-dialog";
+import { SettingsDialog } from "./settings-dialog";
+import { Toolbar } from "./toolbar";
 import { useAppController } from "./use-app-controller";
+import { useViewSettings } from "./view-settings";
 
 export default function App() {
   const [filterDialogMode, setFilterDialogMode] = useState<"create" | "edit">("create");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogBusy, setSaveDialogBusy] = useState(false);
   const [saveDialogError, setSaveDialogError] = useState("");
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const { settings, shellStyle, updateSetting, resetSettings } = useViewSettings();
   const {
     state,
     loading,
@@ -43,8 +48,15 @@ export default function App() {
     }
   }
 
+  async function openCreateFilterDialog(query: string) {
+    await api.setFilterDraft(query);
+    setSaveDialogError("");
+    setFilterDialogMode("create");
+    setSaveDialogOpen(true);
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={shellStyle}>
       <Toolbar
         canEditSavedFilter={Boolean(activeFilter)}
         state={state}
@@ -57,10 +69,12 @@ export default function App() {
           setSaveDialogOpen(true);
         }}
         onSelectDevice={(deviceID) => void api.selectDevice(deviceID)}
+        onSetPackageScope={(scope) => void api.setPackageScope(scope)}
         onApplySavedFilter={(filterID) => void api.applySavedFilter(filterID)}
         onPauseToggle={() => void api.pauseToggle()}
         onClearVisible={() => void api.clearVisible()}
         onExport={() => void api.exportVisible()}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
 
       <main className="workspace">
@@ -69,18 +83,13 @@ export default function App() {
             state={state}
             autoFollow={autoFollow}
             onSelectPackage={(packageName) => void api.selectPackage(packageName)}
-            onFilterDraftChange={(query) => void api.setFilterDraft(query)}
-            onApplyFilter={() => void api.applyFilter()}
-            onSetPackageScope={(scope) => void api.setPackageScope(scope)}
+            onApplyFilter={(query) => void api.applyFilter(query)}
             onToggleFollow={() => setAutoFollow(!autoFollow)}
-            onSaveFilter={() => {
-              setSaveDialogError("");
-              setFilterDialogMode("create");
-              setSaveDialogOpen(true);
-            }}
+            onSaveFilter={(query) => void openCreateFilterDialog(query)}
           />
 
           <LogTable
+            fontSize={settings.tableFontSize}
             loading={loading}
             logs={state.logs}
             visibleCount={state.visibleCount}
@@ -125,6 +134,13 @@ export default function App() {
           }
         }}
         onSubmit={handleSaveFilter}
+      />
+      <SettingsDialog
+        open={settingsDialogOpen}
+        settings={settings}
+        onChange={updateSetting}
+        onClose={() => setSettingsDialogOpen(false)}
+        onReset={resetSettings}
       />
     </div>
   );

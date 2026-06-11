@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEve
 import { LogRow, type LogItemView } from "./log-row";
 
 type LogTableProps = {
+  fontSize: number;
   loading: boolean;
   logs: LogItemView[];
   visibleCount: number;
@@ -13,8 +14,6 @@ type LogTableProps = {
 };
 
 type ColumnKey = "time" | "level" | "tag";
-
-const rowHeight = 27;
 const columnMinWidths: Record<ColumnKey, number> = {
   time: 84,
   level: 40,
@@ -32,7 +31,12 @@ function clampWindowStart(start: number, size: number, visibleRows: number) {
   return Math.min(start, maxStart);
 }
 
+function resolveRowHeight(fontSize: number) {
+  return Math.max(26, fontSize * 2 + 4);
+}
+
 export function LogTable({
+  fontSize,
   loading,
   logs,
   visibleCount,
@@ -43,6 +47,9 @@ export function LogTable({
   onSelectLog,
 }: LogTableProps) {
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
+  const rowHeight = resolveRowHeight(fontSize);
+  const chipBox = Math.max(18, fontSize + 8);
+  const chipSize = Math.max(10, fontSize - 1);
 
   const gridTemplate = useMemo(
     () => `${columnWidths.time}px ${columnWidths.level}px ${columnWidths.tag}px minmax(260px, 1fr)`,
@@ -50,8 +57,16 @@ export function LogTable({
   );
 
   const shellStyle = useMemo(
-    () => ({ "--table-columns": gridTemplate } as CSSProperties),
-    [gridTemplate],
+    () =>
+      ({
+        "--table-columns": gridTemplate,
+        "--table-font-size": `${fontSize}px`,
+        "--table-row-height": `${rowHeight}px`,
+        "--table-head-height": `${rowHeight + 3}px`,
+        "--table-chip-box": `${chipBox}px`,
+        "--table-chip-size": `${chipSize}px`,
+      }) as CSSProperties,
+    [chipBox, chipSize, fontSize, gridTemplate, rowHeight],
   );
 
   const buffer = 20;

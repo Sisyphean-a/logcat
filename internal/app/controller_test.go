@@ -174,6 +174,22 @@ func TestControllerApplyEmptyFilterShowsAllLogs(t *testing.T) {
 	}
 }
 
+func TestControllerSetFilterDraftPreservesWhitespaceUntilApply(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+
+	controller.SetFilterDraft(` message~:"submit" `)
+
+	if got := controller.Model().Filter.Draft; got != ` message~:"submit" ` {
+		t.Fatalf("expected draft whitespace preserved, got %q", got)
+	}
+	if err := controller.ApplyFilterDraft(); err != nil {
+		t.Fatalf("ApplyFilterDraft returned error: %v", err)
+	}
+	if got := controller.Model().Filter.Draft; got != `message~:"submit"` {
+		t.Fatalf("expected draft trimmed on apply, got %q", got)
+	}
+}
+
 func TestControllerApplyOrFilterShowsTagOrMessageMatches(t *testing.T) {
 	events := make(chan session.Event, 3)
 	controller := newStreamingController(t, events)

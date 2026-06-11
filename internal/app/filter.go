@@ -12,7 +12,7 @@ func (c *Controller) SetFilterDraft(query string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.model.Filter.Draft = strings.TrimSpace(query)
+	c.model.Filter.Draft = query
 	c.markDirtyLocked()
 }
 
