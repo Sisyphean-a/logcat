@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { main } from "../wailsjs/go/models";
 import {
   DetailCollapseIcon,
@@ -17,6 +17,7 @@ type FilterBarProps = {
   autoFollow: boolean;
   onSelectPackage: (packageName: string) => void;
   onApplyFilter: (query: string) => void;
+  onSearch: (query: string) => void;
   onToggleFollow: () => void;
   onSaveFilter: (query: string) => void;
 };
@@ -41,6 +42,7 @@ export function FilterBar({
   autoFollow,
   onSelectPackage,
   onApplyFilter,
+  onSearch,
   onToggleFollow,
   onSaveFilter,
 }: FilterBarProps) {
@@ -64,6 +66,7 @@ export function FilterBar({
         onApply={onApplyFilter}
         onSave={onSaveFilter}
       />
+      <ResultSearchInput value={state.search.query} onChange={onSearch} />
       <div className="filter-follow">
         <button className={`switch ${autoFollow ? "switch-on" : ""}`} onClick={onToggleFollow}>
           <span className="switch-thumb" />
@@ -94,7 +97,7 @@ function FilterDraftInput({ value, onApply, onSave }: FilterDraftInputProps) {
 
   return (
     <>
-      <div className="filter-input">
+      <div className="filter-input filter-rule-input">
         <span className="filter-icon"><SearchIcon /></span>
         <input
           id="filter-input"
@@ -109,17 +112,83 @@ function FilterDraftInput({ value, onApply, onSave }: FilterDraftInputProps) {
             applyDraft();
           }}
           placeholder='tag=jsbridge || message~:"jsbridge"'
+          title="回车应用过滤规则"
         />
       </div>
-      <div className="filter-actions">
-        <button className="text-button secondary" onClick={applyDraft}>
-          应用
-        </button>
-        <button className="text-button primary" onClick={() => onSave(draft)}>
-          <span className="button-icon"><SaveIcon /></span>
-          保存
-        </button>
+      <button className="text-button primary filter-save-button" onClick={() => onSave(draft)} type="button">
+        <span className="button-icon"><SaveIcon /></span>
+        保存
+      </button>
+    </>
+  );
+}
+
+type ResultSearchInputProps = {
+  value: string;
+  onChange: (query: string) => void;
+};
+
+function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (!event.key || event.key.toLowerCase() !== "f" || (!event.ctrlKey && !event.metaKey)) {
+        return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
+
+  function updateSearch(next: string) {
+    setDraft(next);
+    onChange(next);
+  }
+
+  function clearSearch() {
+    updateSearch("");
+    queueMicrotask(() => inputRef.current?.focus());
+  }
+
+  return (
+    <>
+      <div className="search-box result-search-input">
+        <span className="filter-icon"><SearchIcon /></span>
+        <input
+          ref={inputRef}
+          id="result-search-input"
+          value={draft}
+          onChange={(event) => updateSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") {
+              return;
+            }
+            event.preventDefault();
+            clearSearch();
+          }}
+          placeholder="搜索结果（message / tag）"
+        />
       </div>
+      <button
+        className="text-button secondary search-clear-button"
+        disabled={draft.length === 0}
+        onClick={clearSearch}
+        type="button"
+      >
+        清空
+      </button>
     </>
   );
 }

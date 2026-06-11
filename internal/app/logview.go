@@ -91,8 +91,7 @@ func (c *Controller) SetSearchQuery(query string) {
 	defer c.mu.Unlock()
 
 	c.model.Search.Query = query
-	c.recomputeSearchLocked()
-	c.markDirtyLocked()
+	c.rebuildVisibleFromAllLogsLocked()
 }
 
 func (c *Controller) NextMatch() {
@@ -173,7 +172,7 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 	}
 
 	item := c.appendLogLocked(entry)
-	if c.matchesAppliedFilterLocked(item.Entry) {
+	if c.matchesVisibleLogLocked(item, c.searchQueryLocked()) {
 		c.appendVisibleLogLocked(item)
 	}
 	c.markDirtyLocked()
@@ -182,9 +181,11 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
 	display := formatLogDisplay(entry)
 	item := LogViewItem{
+		SourceIndex:  len(c.allLogs),
 		Entry:        entry,
 		Display:      display,
 		DisplayLower: strings.ToLower(display),
+		SearchLower:  searchLowerText(entry),
 	}
 	c.allLogs = append(c.allLogs, item)
 	c.model.TotalLogs = len(c.allLogs)
@@ -194,39 +195,36 @@ func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
 func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
 	index := len(c.model.VisibleLogs)
 	c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+	c.appendSearchMatchLocked(index)
+}
 
-	query := strings.TrimSpace(c.model.Search.Query)
-	if query == "" {
+func (c *Controller) appendSearchMatchLocked(index int) {
+	if c.searchQueryLocked() == "" {
 		return
 	}
-
-	if !strings.Contains(item.DisplayLower, normalizedSearchQuery(query)) {
-		return
-	}
-
 	c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
 	if c.model.Search.Current != -1 {
 		return
 	}
 
 	c.model.Search.Current = 0
-	c.model.SelectedIndex = c.model.Search.MatchIndexes[0]
+	c.model.SelectedIndex = 0
 }
 
 func (c *Controller) recomputeSearchLocked() {
-	query := strings.TrimSpace(c.model.Search.Query)
-	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-
-	if query == "" {
+	if c.searchQueryLocked() == "" {
+		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
 		c.model.Search.Current = -1
 		return
 	}
 
-	normalizedQuery := normalizedSearchQuery(query)
-	for index, item := range c.model.VisibleLogs {
-		if strings.Contains(item.DisplayLower, normalizedQuery) {
-			c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
-		}
+	if cap(c.model.Search.MatchIndexes) < len(c.model.VisibleLogs) {
+		c.model.Search.MatchIndexes = make([]int, 0, len(c.model.VisibleLogs))
+	} else {
+		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
+	}
+	for index := range c.model.VisibleLogs {
+		c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
 	}
 
 	if len(c.model.Search.MatchIndexes) == 0 {
@@ -260,11 +258,11 @@ func formatLogDisplay(entry logcat.LogEntry) string {
 }
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
-	if c.compiledFilter.matchAll() {
+	selectedSourceIndex := c.selectedSourceIndexLocked()
+	searchQuery := c.searchQueryLocked()
+	if c.compiledFilter.matchAll() && searchQuery == "" {
 		c.model.VisibleLogs = append(c.model.VisibleLogs[:0], c.allLogs...)
-		if c.model.SelectedIndex >= len(c.model.VisibleLogs) {
-			c.model.SelectedIndex = -1
-		}
+		c.restoreSelectionLocked(selectedSourceIndex)
 		c.recomputeSearchLocked()
 		c.markDirtyLocked()
 		return
@@ -276,18 +274,51 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 		c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	}
 	for _, item := range c.allLogs {
-		if !c.matchesAppliedFilterLocked(item.Entry) {
+		if !c.matchesVisibleLogLocked(item, searchQuery) {
 			continue
 		}
 		c.model.VisibleLogs = append(c.model.VisibleLogs, item)
 	}
-	if c.model.SelectedIndex >= len(c.model.VisibleLogs) {
-		c.model.SelectedIndex = -1
-	}
+	c.restoreSelectionLocked(selectedSourceIndex)
 	c.recomputeSearchLocked()
 	c.markDirtyLocked()
 }
 
 func normalizedSearchQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))
+}
+
+func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchQuery string) bool {
+	if !c.compiledFilter.matchAll() && !c.matchesAppliedFilterLocked(item.Entry) {
+		return false
+	}
+	return searchQuery == "" || strings.Contains(item.SearchLower, searchQuery)
+}
+
+func (c *Controller) restoreSelectionLocked(sourceIndex int) {
+	c.model.SelectedIndex = -1
+	if sourceIndex < 0 {
+		return
+	}
+	for index, item := range c.model.VisibleLogs {
+		if item.SourceIndex == sourceIndex {
+			c.model.SelectedIndex = index
+			return
+		}
+	}
+}
+
+func (c *Controller) searchQueryLocked() string {
+	return normalizedSearchQuery(c.model.Search.Query)
+}
+
+func (c *Controller) selectedSourceIndexLocked() int {
+	if c.model.SelectedIndex < 0 || c.model.SelectedIndex >= len(c.model.VisibleLogs) {
+		return -1
+	}
+	return c.model.VisibleLogs[c.model.SelectedIndex].SourceIndex
+}
+
+func searchLowerText(entry logcat.LogEntry) string {
+	return strings.ToLower(entry.Tag + "\n" + entry.Message)
 }

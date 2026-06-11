@@ -1,7 +1,15 @@
 import { main } from "../wailsjs/go/models";
-import { TokenText, chipTone, getLogSemanticTone, timeOnly, tokenizeLogText } from "./log-text";
+import { buildPlainTextTokens, TokenText, chipTone, getLogSemanticTone, timeOnly, tokenizeLogText } from "./log-text";
 
-export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void }) {
+export function LogRow({
+  log,
+  onClick,
+  searchQuery,
+}: {
+  log: LogItemView;
+  onClick: () => void;
+  searchQuery: string;
+}) {
   const tone = getLogSemanticTone(log);
   const messageTokens = tokenizeLogText(log.message);
   return (
@@ -9,7 +17,6 @@ export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void
       className={[
         "table-row",
         `tone-${tone}`,
-        log.isMatch ? "matched" : "",
         log.isSelected ? "selected" : "",
         log.isCurrent ? "current" : "",
       ].join(" ")}
@@ -17,9 +24,11 @@ export function LogRow({ log, onClick }: { log: LogItemView; onClick: () => void
     >
       <span className="time-cell">{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${chipTone(tone)}`}>{log.level}</span>
-      <span className="tag-cell">{log.tag}</span>
+      <span className="tag-cell">
+        <TokenText query={searchQuery} tokens={buildPlainTextTokens(log.tag)} />
+      </span>
       <span className="message-cell">
-        <TokenText tokens={messageTokens} />
+        <TokenText query={searchQuery} tokens={messageTokens} />
       </span>
     </button>
   );

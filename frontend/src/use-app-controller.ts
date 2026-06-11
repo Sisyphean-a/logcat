@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 import { app, main } from "../wailsjs/go/models";
 import { createMockState } from "./mock-state";
@@ -18,6 +18,7 @@ import {
   SelectPackage,
   SetFilterDraft,
   SetPackageScope,
+  SetSearchQuery,
   UpdateSavedFilterDefinition,
 } from "../wailsjs/go/main/App";
 import { type SaveFilterDraft } from "./filter-rule-builder";
@@ -38,6 +39,7 @@ export function useAppController() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const autoFollowRef = useRef(autoFollow);
   const ignoreScrollRef = useRef(false);
+  const previewAllLogsRef = useRef<main.LogItemView[]>([]);
 
   function syncTableMetrics(node: HTMLDivElement) {
     setScrollTop(node.scrollTop);
@@ -50,7 +52,9 @@ export function useAppController() {
 
   useEffect(() => {
     if (!isWailsRuntime()) {
-      setState(createMockState());
+      const snapshot = createMockState();
+      previewAllLogsRef.current = snapshot.logs.map((item) => main.LogItemView.createFrom(item));
+      setState(snapshot);
       setLoading(false);
       return;
     }
@@ -117,6 +121,8 @@ export function useAppController() {
       setPackageScope: (scope: string) => withAction(() => SetPackageScope(scope), setActionError),
       setFilterDraft: (query: string) =>
         SetFilterDraft(query).then((next: AppState) => setState(main.AppState.createFrom(next))),
+      setSearchQuery: (query: string) =>
+        SetSearchQuery(query).then((next: AppState) => setState(main.AppState.createFrom(next))),
       applyFilter: async (query?: string) => {
         if (query !== undefined) {
           const next = await SetFilterDraft(query);
@@ -165,7 +171,7 @@ export function useAppController() {
           setActionError,
         );
       },
-    } : createPreviewApi(state, setState, setActionError)),
+    } : createPreviewApi(state, setState, setActionError, previewAllLogsRef)),
     [state],
   );
 
@@ -277,6 +283,87 @@ const emptyState = new main.AppState({
   logs: [],
 });
 
+function buildPreviewSearchState(
+  state: AppState,
+  allLogs: main.LogItemView[],
+  query: string,
+) {
+  const next = main.AppState.createFrom(state);
+  const selectedRaw = currentPreviewSelectionRaw(state);
+  const normalizedQuery = normalizePreviewSearchQuery(query);
+  const visibleLogs = normalizedQuery
+    ? allLogs.filter((item) => matchesPreviewSearch(item, normalizedQuery))
+    : allLogs;
+
+  next.search.query = query;
+  next.logs = visibleLogs.map((item, index) => main.LogItemView.createFrom({
+    ...item,
+    index,
+    isMatch: false,
+    isCurrent: false,
+    isSelected: false,
+  }));
+  next.visibleCount = next.logs.length;
+  next.visibleStart = 0;
+  syncPreviewSelection(next, selectedRaw, Boolean(normalizedQuery));
+  return next;
+}
+
+function syncPreviewSelection(
+  state: AppState,
+  preferredRaw: string,
+  preferFirstResult: boolean,
+) {
+  const hasSearch = normalizePreviewSearchQuery(state.search.query).length > 0;
+  state.search.matchIndexes = hasSearch ? state.logs.map((item) => item.index) : [];
+
+  const selectedIndex = preferredRaw
+    ? state.logs.findIndex((item) => item.raw === preferredRaw)
+    : -1;
+  const fallbackIndex = preferFirstResult && state.logs.length > 0 ? 0 : -1;
+  state.selectedIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex;
+  state.search.current = hasSearch && state.selectedIndex >= 0 ? state.selectedIndex : -1;
+
+  state.logs = state.logs.map((item, index) => {
+    item.isSelected = index === state.selectedIndex;
+    item.isCurrent = hasSearch && index === state.search.current;
+    item.isMatch = false;
+    return item;
+  });
+  state.selectedLog = buildPreviewSelectedLog(state.logs[state.selectedIndex]);
+}
+
+function buildPreviewSelectedLog(log?: main.LogItemView) {
+  if (!log) {
+    return undefined;
+  }
+  return {
+    index: log.index,
+    timeText: log.timeText,
+    level: log.level,
+    tag: log.tag,
+    message: log.message,
+    source: log.source,
+    raw: log.raw,
+    display: log.display,
+  };
+}
+
+function currentPreviewSelectionRaw(state: AppState) {
+  if (state.selectedLog?.raw) {
+    return state.selectedLog.raw;
+  }
+  return state.selectedIndex >= 0 ? state.logs[state.selectedIndex]?.raw || "" : "";
+}
+
+function normalizePreviewSearchQuery(query: string) {
+  return query.trim().toLowerCase();
+}
+
+function matchesPreviewSearch(log: main.LogItemView, query: string) {
+  return `${log.tag}\n${log.message}`.toLowerCase().includes(query);
+}
+
 function isWailsRuntime() {
   return Boolean((window as unknown as { go?: unknown; runtime?: unknown }).go) &&
     Boolean((window as unknown as { go?: unknown; runtime?: unknown }).runtime);
@@ -286,6 +373,7 @@ function createPreviewApi(
   state: AppState,
   setState: (state: AppState) => void,
   setError: (value: string) => void,
+  allLogsRef: MutableRefObject<main.LogItemView[]>,
 ) {
   return {
     selectDevice: async (_deviceID: string) => undefined,
@@ -315,6 +403,10 @@ function createPreviewApi(
       next.filter.draft = query;
       setState(next);
     },
+    setSearchQuery: async (query: string) => {
+      const next = buildPreviewSearchState(state, allLogsRef.current, query);
+      setState(next);
+    },
     applyFilter: async (query?: string) => {
       const next = main.AppState.createFrom(state);
       if (query !== undefined) {
@@ -328,22 +420,7 @@ function createPreviewApi(
     copySelected: async () => undefined,
     selectLog: async (index: number) => {
       const next = main.AppState.createFrom(state);
-      next.selectedIndex = index;
-      next.logs = next.logs.map((item) => {
-        item.isSelected = item.index === index;
-        return item;
-      });
-      const current = next.logs.find((item) => item.index === index);
-      next.selectedLog = current ? {
-        index: current.index,
-        timeText: current.timeText,
-        level: current.level,
-        tag: current.tag,
-        message: current.message,
-        source: current.source,
-        raw: current.raw,
-        display: current.display,
-      } : undefined;
+      syncPreviewSelection(next, index >= 0 ? next.logs[index]?.raw || "" : "", false);
       setState(next);
     },
     pauseToggle: async () => {
@@ -354,6 +431,7 @@ function createPreviewApi(
     },
     clearVisible: async () => {
       const next = main.AppState.createFrom(state);
+      allLogsRef.current = [];
       next.logs = [];
       next.visibleCount = 0;
       next.visibleStart = 0;

@@ -94,6 +94,7 @@ export default function App() {
             autoFollow={autoFollow}
             onSelectPackage={(packageName) => void api.selectPackage(packageName)}
             onApplyFilter={(query) => void api.applyFilter(query)}
+            onSearch={(query) => void api.setSearchQuery(query)}
             onToggleFollow={() => setAutoFollow(!autoFollow)}
             onSaveFilter={(query) => void openCreateFilterDialog(query)}
           />
@@ -102,6 +103,7 @@ export default function App() {
             fontSize={settings.tableFontSize}
             loading={loading}
             logs={state.logs}
+            searchQuery={state.search.query}
             visibleCount={state.visibleCount}
             scrollTop={scrollTop}
             viewportHeight={viewportHeight}

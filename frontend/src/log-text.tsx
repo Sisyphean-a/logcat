@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 type LogTokenKind =
   | "plain"
   | "error-keyword"
@@ -11,9 +13,13 @@ type LogTokenKind =
 export type LogTextToken = {
   text: string;
   kind: LogTokenKind;
+  start: number;
+  end: number;
 };
 
 export type LogTone = "error" | "info" | "stack" | "warn";
+type HighlightRange = { start: number; end: number };
+type TokenPiece = { text: string; highlight: boolean };
 
 const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
   { kind: "url", regex: /https?:\/\/[^\s)]+/g },
@@ -25,12 +31,24 @@ const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
   { kind: "path", regex: /(?:\/[\w./?&=#-]+)+/g },
 ];
 
-export function TokenText({ tokens }: { tokens: LogTextToken[] }) {
+export function TokenText({ query = "", tokens }: { query?: string; tokens: LogTextToken[] }) {
+  const ranges = buildHighlightRanges(tokens, query);
   return tokens.map((token, index) => (
-    <span key={`${index}-${token.kind}-${token.text}`} className={token.kind === "plain" ? undefined : `token-${token.kind}`}>
-      {token.text}
-    </span>
+    <Fragment key={`${index}-${token.kind}-${token.start}-${token.end}`}>
+      {splitTokenByRanges(token, ranges).map((piece, pieceIndex) => (
+        <span
+          key={`${index}-${pieceIndex}-${piece.highlight ? "hit" : "plain"}`}
+          className={buildTokenClassName(token.kind, piece.highlight)}
+        >
+          {piece.text}
+        </span>
+      ))}
+    </Fragment>
   ));
+}
+
+export function buildPlainTextTokens(text: string): LogTextToken[] {
+  return [{ text, kind: "plain", start: 0, end: text.length }];
 }
 
 export function tokenizeLogText(text: string): LogTextToken[] {
@@ -40,17 +58,17 @@ export function tokenizeLogText(text: string): LogTextToken[] {
   while (cursor < text.length) {
     const match = findNextToken(text, cursor);
     if (!match) {
-      tokens.push({ text: text.slice(cursor), kind: "plain" as const });
+      tokens.push({ text: text.slice(cursor), kind: "plain", start: cursor, end: text.length });
       break;
     }
     if (match.index > cursor) {
-      tokens.push({ text: text.slice(cursor, match.index), kind: "plain" as const });
+      tokens.push({ text: text.slice(cursor, match.index), kind: "plain", start: cursor, end: match.index });
     }
-    tokens.push({ text: match.text, kind: match.kind });
+    tokens.push({ text: match.text, kind: match.kind, start: match.index, end: match.index + match.text.length });
     cursor = match.index + match.text.length;
   }
 
-  return tokens.length > 0 ? tokens : [{ text, kind: "plain" as const }];
+  return tokens.length > 0 ? tokens : [{ text, kind: "plain", start: 0, end: text.length }];
 }
 
 export function getLogSemanticTone(log: { level: string; message: string }): LogTone {
@@ -96,4 +114,70 @@ function findNextToken(text: string, cursor: number) {
   }
 
   return best;
+}
+
+function buildHighlightRanges(tokens: LogTextToken[], query: string) {
+  const normalizedQuery = normalizeQuery(query);
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const text = tokens.map((token) => token.text).join("");
+  const normalizedText = text.toLowerCase();
+  const ranges: HighlightRange[] = [];
+  let cursor = 0;
+
+  while (cursor < normalizedText.length) {
+    const index = normalizedText.indexOf(normalizedQuery, cursor);
+    if (index === -1) {
+      break;
+    }
+    ranges.push({ start: index, end: index + normalizedQuery.length });
+    cursor = index + normalizedQuery.length;
+  }
+  return ranges;
+}
+
+function splitTokenByRanges(token: LogTextToken, ranges: HighlightRange[]) {
+  const pieces: TokenPiece[] = [];
+  let cursor = token.start;
+
+  for (const range of ranges) {
+    if (range.end <= token.start) {
+      continue;
+    }
+    if (range.start >= token.end) {
+      break;
+    }
+
+    const start = Math.max(range.start, token.start);
+    const end = Math.min(range.end, token.end);
+    if (start > cursor) {
+      pieces.push({ text: sliceTokenText(token, cursor, start), highlight: false });
+    }
+    if (end > start) {
+      pieces.push({ text: sliceTokenText(token, start, end), highlight: true });
+    }
+    cursor = end;
+  }
+
+  if (cursor < token.end) {
+    pieces.push({ text: sliceTokenText(token, cursor, token.end), highlight: false });
+  }
+  return pieces.length > 0 ? pieces : [{ text: token.text, highlight: false }];
+}
+
+function sliceTokenText(token: LogTextToken, start: number, end: number) {
+  return token.text.slice(start - token.start, end - token.start);
+}
+
+function buildTokenClassName(kind: LogTokenKind, highlight: boolean) {
+  const className = [kind === "plain" ? "" : `token-${kind}`, highlight ? "search-hit" : ""]
+    .filter(Boolean)
+    .join(" ");
+  return className || undefined;
+}
+
+function normalizeQuery(query: string) {
+  return query.trim().toLowerCase();
 }

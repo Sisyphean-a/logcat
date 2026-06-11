@@ -281,9 +281,18 @@ button:disabled {
 .filter-input,
 .search-box {
   position: relative;
-  flex: 1;
-  min-width: 220px;
+  min-width: 0;
   height: 24px;
+}
+
+.filter-rule-input {
+  flex: 1.2;
+  min-width: 260px;
+}
+
+.result-search-input {
+  flex: 0.95;
+  min-width: 220px;
 }
 
 .filter-input input,
@@ -303,6 +312,10 @@ button:disabled {
 .filter-input input {
   padding-left: 25px;
   font-family: Consolas, "JetBrains Mono", monospace;
+}
+
+.search-box input {
+  padding-left: 25px;
 }
 
 .filter-icon {
@@ -526,7 +539,8 @@ button:disabled {
 
 .filter-follow,
 .toolbar-actions,
-.filter-actions {
+.filter-save-button,
+.search-clear-button {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -540,18 +554,15 @@ button:disabled {
   gap: 2px;
 }
 
-.filter-actions {
-  gap: 6px;
+.filter-save-button,
+.search-clear-button {
+  white-space: nowrap;
 }
 
 .switch-label {
   font-size: 11px;
   color: #999;
   white-space: nowrap;
-}
-
-.filter-bar .text-button.secondary {
-  display: none;
 }
 
 .text-button.primary {
@@ -668,6 +679,12 @@ button:disabled {
 .message-cell {
   color: #d9e0ea;
   display: block;
+}
+
+.search-hit {
+  background: rgba(244, 197, 75, 0.26);
+  color: #fff4bf;
+  border-radius: 2px;
 }
 
 .token-url {
@@ -1277,10 +1294,6 @@ button:disabled {
 
   .package-select {
     max-width: 180px;
-  }
-
-  .filter-actions .text-button.secondary {
-    display: inline-flex;
   }
 }
 

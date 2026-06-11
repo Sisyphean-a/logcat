@@ -5,6 +5,7 @@ type LogTableProps = {
   fontSize: number;
   loading: boolean;
   logs: LogItemView[];
+  searchQuery: string;
   visibleCount: number;
   scrollTop: number;
   viewportHeight: number;
@@ -39,6 +40,7 @@ export function LogTable({
   fontSize,
   loading,
   logs,
+  searchQuery,
   visibleCount,
   scrollTop,
   viewportHeight,
@@ -124,7 +126,12 @@ export function LogTable({
         ) : (
           <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
             {logs.slice(start, end).map((log) => (
-              <LogRow key={`${log.index}-${log.raw}`} log={log} onClick={() => onSelectLog(log.index)} />
+              <LogRow
+                key={`${log.index}-${log.raw}`}
+                log={log}
+                onClick={() => onSelectLog(log.index)}
+                searchQuery={searchQuery}
+              />
             ))}
           </div>
         )}

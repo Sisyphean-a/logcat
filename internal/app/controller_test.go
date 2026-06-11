@@ -595,6 +595,9 @@ func TestControllerSearchTracksMatchesAndCurrentSelection(t *testing.T) {
 	if model.SelectedIndex != model.Search.MatchIndexes[0] {
 		t.Fatalf("expected selection to follow first match, got %d", model.SelectedIndex)
 	}
+	if len(model.VisibleLogs) != 2 {
+		t.Fatalf("expected search to narrow visible logs, got %d", len(model.VisibleLogs))
+	}
 
 	controller.NextMatch()
 	model = controller.Model()
@@ -609,6 +612,44 @@ func TestControllerSearchTracksMatchesAndCurrentSelection(t *testing.T) {
 	model = controller.Model()
 	if model.Search.Current != 0 {
 		t.Fatalf("expected previous match to wrap back to first, got %d", model.Search.Current)
+	}
+}
+
+func TestControllerSearchUsesTagAndMessageOnly(t *testing.T) {
+	events := make(chan session.Event, 3)
+	controller := newStreamingController(t, events)
+
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.479",
+		Level:    "I",
+		Tag:      "chromium",
+		Message:  "bridge ready",
+		Raw:      "bridge ready",
+	}}
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.480",
+		Level:    "E",
+		Tag:      "jsbridge",
+		Message:  "token expired",
+		Raw:      "token expired",
+	}}
+
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 2
+	})
+
+	controller.SetSearchQuery("16:42")
+	if got := len(controller.Model().VisibleLogs); got != 0 {
+		t.Fatalf("expected time text to be ignored by search, got %d visible logs", got)
+	}
+
+	controller.SetSearchQuery("jsbridge")
+	model := controller.Model()
+	if len(model.VisibleLogs) != 1 {
+		t.Fatalf("expected tag match to stay visible, got %d", len(model.VisibleLogs))
+	}
+	if model.VisibleLogs[0].Entry.Tag != "jsbridge" {
+		t.Fatalf("expected tag match to remain, got %q", model.VisibleLogs[0].Entry.Tag)
 	}
 }
 
