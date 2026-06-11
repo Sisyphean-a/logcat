@@ -6,21 +6,20 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 10, 14, 0.72);
-  backdrop-filter: blur(10px);
+  background: rgba(10, 11, 14, 0.58);
+  backdrop-filter: blur(6px);
 }
 
 .dialog-card {
-  width: min(760px, 100%);
-  max-height: min(88vh, 860px);
+  width: min(680px, 100%);
+  max-height: min(84vh, 760px);
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at top right, rgba(0, 211, 243, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(27, 30, 39, 0.96), rgba(18, 19, 24, 0.98));
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  border: 1px solid #3b3e45;
+  border-radius: 10px;
+  background: #2b2d32;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
 }
 
 .dialog-header,
@@ -29,33 +28,35 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 14px 16px;
+  background: #2a2c31;
 }
 
 .dialog-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid #3a3d44;
 }
 
 .dialog-footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid #3a3d44;
 }
 
 .dialog-body {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 14px;
+  padding: 16px;
+  background: #2f3136;
   overflow: auto;
 }
 
 .dialog-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: #f2f6fb;
+  color: #f1f3f6;
 }
 
 .dialog-subtitle {
   margin-top: 4px;
-  color: rgba(212, 212, 212, 0.7);
+  color: #b1b7c0;
   font-size: 12px;
 }
 
@@ -67,7 +68,7 @@
 .dialog-field > span,
 .dialog-field-header {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: #c4cad3;
 }
 
 .dialog-field-header {
@@ -81,25 +82,57 @@
 .dialog-select,
 .dialog-preview {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  background: rgba(10, 12, 16, 0.72);
-  color: var(--text);
+  border: 1px solid #454851;
+  border-radius: 8px;
+  background: #1d1f24;
+  color: #eef2f7;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .dialog-input,
 .dialog-select {
-  height: 34px;
+  height: 32px;
   padding: 0 12px;
 }
 
 .dialog-preview {
-  min-height: 72px;
+  min-height: 88px;
   padding: 10px 12px;
   resize: vertical;
   font-family: "JetBrains Mono", Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.dialog-card .ghost-button,
+.dialog-card .text-button {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 7px;
+  border-color: #454851;
+  background: #26292e;
+  color: #d7dce5;
+  font-size: 12px;
+}
+
+.dialog-card .ghost-button:hover,
+.dialog-card .text-button:hover {
+  background: #2d3037;
+}
+
+.dialog-card .text-button.primary {
+  border-color: #3c76f4;
+  background: #3c76f4;
+  color: #fff;
+}
+
+.dialog-card .text-button.primary:hover {
+  background: #4a82ff;
+}
+
+.dialog-card .text-button.secondary {
+  background: #26292e;
+  color: #d7dce5;
 }
 
 .rule-groups {
@@ -109,11 +142,11 @@
 
 .rule-group-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #3b3f47;
+  border-radius: 10px;
+  background: #26292f;
 }
 
 .rule-group-header {
@@ -126,12 +159,12 @@
 .rule-group-title {
   font-size: 13px;
   font-weight: 600;
-  color: #eef4ff;
+  color: #eef2f7;
 }
 
 .rule-group-hint {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #9aa1ac;
 }
 
 .rule-condition-list {
@@ -141,8 +174,8 @@
 
 .rule-condition-row {
   display: grid;
-  grid-template-columns: 52px 96px 116px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: 52px 100px 110px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
 }
 
@@ -150,16 +183,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 34px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #9fb8c7;
+  height: 32px;
+  border: 1px solid #3f434b;
+  border-radius: 7px;
+  background: #343840;
+  color: #a6adba;
   font-family: "JetBrains Mono", Consolas, monospace;
   font-size: 11px;
 }
 
 .rule-join.muted {
-  color: rgba(159, 184, 199, 0.52);
+  color: #848b97;
 }
 
 .rule-value-input {
@@ -174,15 +208,15 @@
 
 .dialog-error {
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 100, 103, 0.18);
-  background: rgba(255, 100, 103, 0.08);
-  color: #ffb6b8;
+  border-radius: 8px;
+  border: 1px solid #6b3438;
+  background: #3a2326;
+  color: #ffc0c1;
   font-size: 12px;
 }
 
 .dialog-close {
-  min-width: 64px;
+  min-width: 56px;
 }
 
 @media (max-width: 820px) {

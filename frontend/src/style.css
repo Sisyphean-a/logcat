@@ -952,7 +952,7 @@ button:disabled {
 }
 
 .saved-filters-dialog {
-  width: min(1080px, 100%);
+  width: min(980px, 100%);
 }
 
 .dialog-header,
@@ -991,7 +991,7 @@ button:disabled {
 
 .saved-filters-layout {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
   flex: 1;
   min-height: 520px;
   min-width: 0;
@@ -1002,17 +1002,17 @@ button:disabled {
 .saved-filters-sidebar {
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 12px;
-  padding: 16px;
-  border-right: 1px solid var(--border);
-  background: #141922;
+  gap: 10px;
+  padding: 14px;
+  border-right: 1px solid #3a3d44;
+  background: #25282d;
   min-width: 0;
   min-height: 0;
 }
 
 .saved-filters-sidebar-title {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: #c4cad3;
 }
 
 .saved-filters-list {
@@ -1024,25 +1024,25 @@ button:disabled {
 
 .saved-filter-nav-item {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 10px 12px 11px;
+  border: 1px solid #3b3f47;
   border-radius: 8px;
-  background: #10151d;
+  background: #202329;
   text-align: left;
   cursor: pointer;
 }
 
 .saved-filter-nav-item:hover,
 .saved-filter-nav-item.active {
-  border-color: #2f3d4e;
-  background: #161d27;
+  border-color: #56627f;
+  background: #262a31;
 }
 
 .saved-filter-nav-name {
   font-size: 12px;
-  color: #eef4ff;
+  color: #eef2f7;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1057,7 +1057,7 @@ button:disabled {
 
 .saved-filter-nav-package {
   min-width: 0;
-  color: var(--text-muted);
+  color: #9da4af;
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1070,8 +1070,8 @@ button:disabled {
   height: 18px;
   padding: 0 7px;
   border-radius: 999px;
-  background: rgba(0, 211, 243, 0.14);
-  color: rgba(0, 211, 243, 0.92);
+  background: rgba(82, 114, 182, 0.2);
+  color: #c8d6fb;
   font-size: 10px;
   flex: 0 0 auto;
 }
@@ -1079,6 +1079,7 @@ button:disabled {
 .saved-filters-main {
   display: flex;
   flex-direction: column;
+  background: #2f3136;
   min-width: 0;
   min-height: 0;
 }
@@ -1088,8 +1089,9 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  border-bottom: 1px solid #3a3d44;
+  background: #2a2c31;
 }
 
 .saved-filters-current,
@@ -1106,8 +1108,8 @@ button:disabled {
 
 .saved-filters-current-name {
   min-width: 0;
-  color: #eef4ff;
-  font-size: 12px;
+  color: #eef2f7;
+  font-size: 13px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1124,13 +1126,13 @@ button:disabled {
   display: grid;
   place-items: center;
   min-height: 520px;
-  color: var(--text-muted);
+  color: #9da4af;
   font-size: 12px;
 }
 
 .saved-filters-footer-error {
-  color: #ffb2b4;
-  font-size: 11px;
+  color: #ffc0c1;
+  font-size: 12px;
 }
 
 .dialog-field {
