@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/xiakn/logcat/internal/adb"
@@ -38,7 +37,6 @@ func (c *Controller) consumeDeviceUpdates(
 			if !ok {
 				return
 			}
-			log.Printf("consumeDeviceUpdates devices=%v", devices)
 			if err := c.syncDevices(context.Background(), devices); err != nil {
 				c.updateStatus(err.Error())
 			}
@@ -67,7 +65,6 @@ func (c *Controller) reconcileTrackedDevices() {
 		return
 	}
 
-	log.Printf("reconcileTrackedDevices devices=%v", devices)
 	if err := c.syncDevices(context.Background(), devices); err != nil {
 		c.updateStatus(err.Error())
 	}

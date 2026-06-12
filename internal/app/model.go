@@ -22,7 +22,6 @@ type LogViewItem struct {
 	Entry        logcat.LogEntry
 	SourceIndex  int
 	Display      string
-	DisplayLower string
 	SearchLower  string
 }
 

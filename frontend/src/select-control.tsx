@@ -47,6 +47,10 @@ export function SelectControl({
     [normalizedOptions, value],
   );
   const display = selected?.label || emptyLabel;
+  const measureLabel = useMemo(
+    () => longestLabel(normalizedOptions, emptyLabel),
+    [normalizedOptions, emptyLabel],
+  );
   const filteredOptions = useMemo(() => {
     if (!filterable) {
       return normalizedOptions;
@@ -58,6 +62,8 @@ export function SelectControl({
     return normalizedOptions.filter((item) => item.label.toLowerCase().includes(normalized));
   }, [filterable, keyword, normalizedOptions]);
 
+  // 依赖测量内容（display + 最长标签）而非数组引用，避免父级每帧传入
+  // 新 options 引用时反复读取 offsetWidth 造成强制同步重排。
   useLayoutEffect(() => {
     const measure = measureTextRef.current;
     const triggerText = triggerTextRef.current;
@@ -67,7 +73,7 @@ export function SelectControl({
 
     const width = Math.max(measure.offsetWidth, triggerText.offsetWidth);
     setMinWidth(Math.ceil(width + 54));
-  }, [display, normalizedOptions]);
+  }, [display, measureLabel]);
 
   useEffect(() => {
     if (!open) {
@@ -140,7 +146,7 @@ export function SelectControl({
       ) : null}
 
       <span ref={measureTextRef} className="select-control-measure">
-        {longestLabel(normalizedOptions, emptyLabel)}
+        {measureLabel}
       </span>
 
       {open ? (

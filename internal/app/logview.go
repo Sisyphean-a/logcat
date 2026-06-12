@@ -181,11 +181,10 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
 	display := formatLogDisplay(entry)
 	item := LogViewItem{
-		SourceIndex:  len(c.allLogs),
-		Entry:        entry,
-		Display:      display,
-		DisplayLower: strings.ToLower(display),
-		SearchLower:  searchLowerText(entry),
+		SourceIndex: len(c.allLogs),
+		Entry:       entry,
+		Display:     display,
+		SearchLower: searchLowerText(entry),
 	}
 	c.allLogs = append(c.allLogs, item)
 	c.model.TotalLogs = len(c.allLogs)

@@ -130,6 +130,9 @@ type ResultSearchInputProps = {
 
 function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
   const [draft, setDraft] = useState(value);
 
   useEffect(() => {
@@ -152,13 +155,34 @@ function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
     };
   }, []);
 
+  useEffect(() => () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+  }, []);
+
+  function flushSearch(next: string) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    onChangeRef.current(next);
+  }
+
   function updateSearch(next: string) {
     setDraft(next);
-    onChange(next);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      onChangeRef.current(next);
+    }, 140);
   }
 
   function clearSearch() {
-    updateSearch("");
+    setDraft("");
+    flushSearch("");
     queueMicrotask(() => inputRef.current?.focus());
   }
 
@@ -172,6 +196,11 @@ function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
           value={draft}
           onChange={(event) => updateSearch(event.target.value)}
           onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              flushSearch(draft);
+              return;
+            }
             if (event.key !== "Escape") {
               return;
             }

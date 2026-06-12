@@ -51,7 +51,30 @@ export function buildPlainTextTokens(text: string): LogTextToken[] {
   return [{ text, kind: "plain", start: 0, end: text.length }];
 }
 
+// 虚拟滚动反复 remount 同一批行时，缓存命中可跳过 7 条正则扫描。
+// 有界 LRU：超出容量时按插入序淘汰最旧条目，防止长会话内存无限增长。
+const tokenizeCacheLimit = 2000;
+const tokenizeCache = new Map<string, LogTextToken[]>();
+
 export function tokenizeLogText(text: string): LogTextToken[] {
+  const cached = tokenizeCache.get(text);
+  if (cached) {
+    return cached;
+  }
+
+  const tokens = computeLogTokens(text);
+
+  if (tokenizeCache.size >= tokenizeCacheLimit) {
+    const oldest = tokenizeCache.keys().next().value;
+    if (oldest !== undefined) {
+      tokenizeCache.delete(oldest);
+    }
+  }
+  tokenizeCache.set(text, tokens);
+  return tokens;
+}
+
+function computeLogTokens(text: string): LogTextToken[] {
   const tokens: LogTextToken[] = [];
   let cursor = 0;
 

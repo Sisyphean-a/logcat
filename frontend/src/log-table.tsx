@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { LogRow, type LogItemView } from "./log-row";
 
 type LogTableProps = {
@@ -49,6 +49,9 @@ export function LogTable({
   onSelectLog,
 }: LogTableProps) {
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
+  const onSelectLogRef = useRef(onSelectLog);
+  onSelectLogRef.current = onSelectLog;
+  const handleSelect = useCallback((index: number) => onSelectLogRef.current(index), []);
   const rowHeight = resolveRowHeight(fontSize);
   const chipBox = Math.max(18, fontSize + 8);
   const chipSize = Math.max(10, fontSize - 1);
@@ -129,7 +132,8 @@ export function LogTable({
               <LogRow
                 key={`${log.index}-${log.raw}`}
                 log={log}
-                onClick={() => onSelectLog(log.index)}
+                index={log.index}
+                onSelect={handleSelect}
                 searchQuery={searchQuery}
               />
             ))}

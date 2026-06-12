@@ -680,6 +680,7 @@ button:disabled {
   min-height: 0;
   overflow: auto;
   background: var(--bg);
+  overflow-anchor: none;
 }
 
 .table-row {
@@ -693,6 +694,7 @@ button:disabled {
   position: relative;
   background: var(--row-info-bg);
   transition: background-color 0.12s ease;
+  contain: layout style paint;
 }
 
 .table-row:hover {

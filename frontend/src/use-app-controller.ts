@@ -40,6 +40,8 @@ export function useAppController() {
   const autoFollowRef = useRef(autoFollow);
   const ignoreScrollRef = useRef(false);
   const previewAllLogsRef = useRef<main.LogItemView[]>([]);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   function syncTableMetrics(node: HTMLDivElement) {
     setScrollTop(node.scrollTop);
@@ -78,18 +80,10 @@ export function useAppController() {
         setLoading(false);
       });
 
+    // 流式热路径：事件 payload 已是反序列化的纯对象，组件只读字段、
+    // 不调用类方法，直接 setState 可省去每帧对 ~1000 条日志的深拷贝重建。
     const handler = (next: AppState) => {
-      const snapshot = main.AppState.createFrom(next);
-      console.debug("state:updated", {
-        selectedDevice: snapshot.selectedDevice,
-        devices: snapshot.devices.map((item) => ({
-          id: item.id,
-          model: item.model,
-          status: item.status,
-        })),
-        filterDraft: snapshot.filter.draft,
-      });
-      setState(snapshot);
+      setState(next);
     };
 
     EventsOn(stateEventName, handler);
@@ -132,7 +126,7 @@ export function useAppController() {
       },
       exportVisible: () => withAction(ExportVisibleLogs, setActionError),
       copySelected: async (kind: "display" | "raw" | "message") => {
-        const selected = state.selectedLog;
+        const selected = stateRef.current.selectedLog;
         if (!selected) {
           return;
         }
@@ -142,7 +136,7 @@ export function useAppController() {
       selectLog: (index: number) =>
         SelectLog(index).then((next: AppState) => setState(main.AppState.createFrom(next))),
       pauseToggle: async () => {
-        const next = state.pause.active ? await ResumeKeep() : await Pause();
+        const next = stateRef.current.pause.active ? await ResumeKeep() : await Pause();
         setState(main.AppState.createFrom(next));
       },
       clearVisible: () =>
@@ -172,7 +166,9 @@ export function useAppController() {
         );
       },
     } : createPreviewApi(state, setState, setActionError, previewAllLogsRef)),
-    [state],
+    // Wails 模式下回调全部走 stateRef，api 可稳定（依赖恒定空键），
+    // 避免流式每帧重建 api 击穿子组件 memo；预览模式无流式，仍依赖 state。
+    [isWailsRuntime() ? null : state],
   );
 
   function handleScroll() {
