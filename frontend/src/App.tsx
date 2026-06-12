@@ -18,7 +18,7 @@ export default function App() {
   const [manageDialogBusy, setManageDialogBusy] = useState(false);
   const [manageDialogError, setManageDialogError] = useState("");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const { settings, shellStyle, updateSetting, resetSettings } = useViewSettings();
+  const { settings, shellStyle, updateSetting, updateTheme, resetSettings } = useViewSettings();
   const {
     state,
     loading,
@@ -67,7 +67,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell" style={shellStyle}>
+    <div className="app-shell" data-theme={settings.theme} style={shellStyle}>
       <Toolbar
         canEditSavedFilter={state.filter.saved.length > 0}
         state={state}
@@ -163,6 +163,7 @@ export default function App() {
         settings={settings}
         onChange={updateSetting}
         onClose={() => setSettingsDialogOpen(false)}
+        onThemeChange={updateTheme}
         onReset={resetSettings}
       />
     </div>

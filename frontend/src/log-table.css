@@ -48,7 +48,7 @@
   position: absolute;
   inset: 2px 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-hover);
   opacity: 0;
   transition: opacity 0.12s ease, background-color 0.12s ease;
 }
@@ -56,5 +56,5 @@
 .table-head-cell:hover .table-resize-handle::before,
 .table-resize-handle:focus-visible::before {
   opacity: 1;
-  background: rgba(0, 211, 243, 0.38);
+  background: var(--surface-hover-accent);
 }

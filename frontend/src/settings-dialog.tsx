@@ -1,15 +1,25 @@
 import { useEffect } from "react";
+import { SettingsPreview, ThemePicker } from "./theme-preview";
+import { type ThemeName } from "./themes";
 import { type ViewSettingKey, type ViewSettings, viewSettingFields } from "./view-settings";
 
 type SettingsDialogProps = {
   open: boolean;
   settings: ViewSettings;
   onChange: (key: ViewSettingKey, value: number) => void;
+  onThemeChange: (theme: ThemeName) => void;
   onClose: () => void;
   onReset: () => void;
 };
 
-export function SettingsDialog({ open, settings, onChange, onClose, onReset }: SettingsDialogProps) {
+export function SettingsDialog({
+  open,
+  settings,
+  onChange,
+  onThemeChange,
+  onClose,
+  onReset,
+}: SettingsDialogProps) {
   useEffect(() => {
     if (!open) {
       return;
@@ -49,7 +59,31 @@ export function SettingsDialog({ open, settings, onChange, onClose, onReset }: S
           </button>
         </header>
 
-        <SettingsFields settings={settings} onChange={onChange} />
+        <div className="dialog-body settings-layout">
+          <section className="settings-section">
+            <div className="settings-section-header">
+              <div className="settings-section-title">主题配色</div>
+              <div className="settings-section-hint">立即切换黑夜、白天和 Solarized Light，并查看实时示例。</div>
+            </div>
+            <ThemePicker theme={settings.theme} onChange={onThemeChange} />
+          </section>
+
+          <section className="settings-section">
+            <div className="settings-section-header">
+              <div className="settings-section-title">示例效果</div>
+              <div className="settings-section-hint">下面的预览会同步当前主题和字号。</div>
+            </div>
+            <SettingsPreview settings={settings} />
+          </section>
+
+          <section className="settings-section">
+            <div className="settings-section-header">
+              <div className="settings-section-title">字号微调</div>
+              <div className="settings-section-hint">调整后会立即作用到工具栏、表格、详情和状态栏。</div>
+            </div>
+            <SettingsFields settings={settings} onChange={onChange} />
+          </section>
+        </div>
 
         <footer className="dialog-footer settings-actions">
           <button className="text-button secondary" type="button" onClick={onReset}>
@@ -72,7 +106,7 @@ function SettingsFields({
   onChange: (key: ViewSettingKey, value: number) => void;
 }) {
   return (
-    <div className="dialog-body settings-grid">
+    <div className="settings-grid">
       {viewSettingFields.map((item) => (
         <label key={item.key} className="settings-field">
           <div className="settings-field-header">

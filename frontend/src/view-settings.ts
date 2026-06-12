@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { buildThemeStyle, isThemeName, type ThemeName } from "./themes";
 
 const minFontSize = 10;
 const maxFontSize = 16;
 const storageKey = "logcat:view-settings";
 
-export type ViewSettings = {
+type FontSettings = {
   toolbarFontSize: number;
   filterFontSize: number;
   tableFontSize: number;
@@ -12,9 +13,14 @@ export type ViewSettings = {
   statusFontSize: number;
 };
 
-export type ViewSettingKey = keyof ViewSettings;
+export type ViewSettings = FontSettings & {
+  theme: ThemeName;
+};
+
+export type ViewSettingKey = keyof FontSettings;
 
 export const defaultViewSettings: ViewSettings = {
+  theme: "dark",
   toolbarFontSize: 11,
   filterFontSize: 11,
   tableFontSize: 11,
@@ -38,13 +44,7 @@ export function useViewSettings() {
   }, [settings]);
 
   const shellStyle = useMemo(
-    () =>
-      ({
-        "--toolbar-font-size": `${settings.toolbarFontSize}px`,
-        "--filter-font-size": `${settings.filterFontSize}px`,
-        "--detail-font-size": `${settings.detailFontSize}px`,
-        "--status-font-size": `${settings.statusFontSize}px`,
-      }) as CSSProperties,
+    () => buildViewStyle(settings),
     [settings],
   );
 
@@ -59,8 +59,20 @@ export function useViewSettings() {
     settings,
     shellStyle,
     updateSetting,
+    updateTheme: (theme: ThemeName) => setSettings((current) => ({ ...current, theme })),
     resetSettings: () => setSettings(defaultViewSettings),
   };
+}
+
+export function buildViewStyle(settings: ViewSettings): CSSProperties {
+  return {
+    ...buildThemeStyle(settings.theme),
+    "--toolbar-font-size": `${settings.toolbarFontSize}px`,
+    "--filter-font-size": `${settings.filterFontSize}px`,
+    "--table-font-size": `${settings.tableFontSize}px`,
+    "--detail-font-size": `${settings.detailFontSize}px`,
+    "--status-font-size": `${settings.statusFontSize}px`,
+  } as CSSProperties;
 }
 
 function loadViewSettings(): ViewSettings {
@@ -70,7 +82,9 @@ function loadViewSettings(): ViewSettings {
   }
 
   const parsed = JSON.parse(raw) as Partial<ViewSettings>;
+  const theme = parsed.theme;
   return {
+    theme: typeof theme === "string" && isThemeName(theme) ? theme : defaultViewSettings.theme,
     toolbarFontSize: clampFontSize(parsed.toolbarFontSize, defaultViewSettings.toolbarFontSize),
     filterFontSize: clampFontSize(parsed.filterFontSize, defaultViewSettings.filterFontSize),
     tableFontSize: clampFontSize(parsed.tableFontSize, defaultViewSettings.tableFontSize),
