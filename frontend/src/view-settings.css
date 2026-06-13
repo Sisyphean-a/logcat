@@ -5,7 +5,6 @@
   --status-font-size: 10px;
 }
 
-.toolbar .brand-title,
 .toolbar .select-control-trigger,
 .toolbar .select-control-option,
 .toolbar .ghost-button,
@@ -190,7 +189,6 @@
 }
 
 .theme-choice-label,
-.settings-preview-brand-title,
 .settings-preview-detail-title {
   color: var(--text-strong);
   font-weight: 600;
@@ -324,25 +322,6 @@
 .settings-preview-toolbar {
   font-size: var(--toolbar-font-size);
   color: var(--text-secondary);
-}
-
-.settings-preview-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-preview-brand-mark {
-  width: 18px;
-  height: 18px;
-  border: 1px solid var(--brand-border);
-  border-radius: 4px;
-  background: var(--brand-bg);
-  color: var(--brand-fg);
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  font-weight: 700;
 }
 
 .settings-preview-pill,

@@ -37,9 +37,6 @@
   --info: #70b8ff;
   --warn: #ffca16;
   --error: #ec5d5e;
-  --brand-border: rgba(76, 204, 230, 0.32);
-  --brand-bg: rgba(0, 162, 199, 0.18);
-  --brand-fg: #4ccce6;
   --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.45);
   --shadow-menu: 0 14px 30px rgba(0, 0, 0, 0.45);
   --row: #18191b;
@@ -175,32 +172,6 @@ svg {
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   overflow: visible;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.brand-mark {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  border: 1px solid var(--brand-border);
-  background: var(--brand-bg);
-  color: var(--brand-fg);
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.brand-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-  letter-spacing: -0.025em;
 }
 
 .toolbar-sep,

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title>Logcat Viewer</title>
+  <rect width="256" height="256" rx="56" fill="#0F172A" />
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="70" cy="82" r="7" fill="#34D399" />
+    <path d="M94 82h70" stroke="#34D399" stroke-width="12" />
+    <circle cx="70" cy="128" r="7" fill="#34D399" />
+    <path d="M94 128h58" stroke="#34D399" stroke-width="12" />
+    <circle cx="70" cy="174" r="7" fill="#34D399" />
+    <path d="M94 174h46" stroke="#34D399" stroke-width="12" />
+    <circle cx="166" cy="150" r="32" stroke="#F8FAFC" stroke-width="12" />
+    <path d="M188 172l24 24" stroke="#F8FAFC" stroke-width="12" />
+  </g>
+</svg>

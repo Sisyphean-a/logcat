@@ -32,10 +32,6 @@ export function SettingsPreview({ settings }: { settings: ViewSettings }) {
   return (
     <section className="settings-preview theme-scope" style={buildViewStyle(settings)}>
       <div className="settings-preview-toolbar">
-        <div className="settings-preview-brand">
-          <span className="settings-preview-brand-mark">L</span>
-          <span className="settings-preview-brand-title">logcat</span>
-        </div>
         <span className="settings-preview-pill">Pixel 8 Pro</span>
         <span className="settings-preview-spacer" />
         <span className="settings-preview-action">筛选</span>

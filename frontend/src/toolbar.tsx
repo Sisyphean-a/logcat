@@ -31,11 +31,6 @@ export function Toolbar({
 }: ToolbarProps) {
   return (
     <header className="toolbar">
-      <div className="brand">
-        <div className="brand-mark">H5</div>
-        <div className="brand-title">Logcat Viewer</div>
-      </div>
-      <div className="toolbar-sep" />
       <SelectControl
         className="toolbar-device"
         emptyLabel="选择设备"
