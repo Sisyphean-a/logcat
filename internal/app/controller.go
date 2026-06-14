@@ -34,7 +34,9 @@ type Controller struct {
 	mu                   sync.RWMutex
 	dirtyCh              chan struct{}
 	model                Model
-	allLogs              []LogViewItem
+	allLogs              logBuffer
+	maxLogEntries        int
+	nextSourceIndex      int
 	revision             uint64
 	sessionCancel        context.CancelFunc
 	watchCancel          context.CancelFunc
@@ -61,7 +63,8 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 		sessionStart:         sessionStart,
 		dirtyCh:              make(chan struct{}, 1),
 		model:                NewModel(),
-		allLogs:              []LogViewItem{},
+		maxLogEntries:        defaultMaxLogEntries,
+		nextSourceIndex:      0,
 		revision:             1,
 		pauseBuffer:          []logcat.LogEntry{},
 		pauseBufferCap:       defaultPauseBufferCap,

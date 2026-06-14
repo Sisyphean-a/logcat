@@ -68,8 +68,7 @@ export function useAppController() {
         if (!mounted) {
           return;
         }
-        const snapshot = main.AppState.createFrom(next);
-        setState(snapshot);
+        setState(next);
         setLoading(false);
       })
       .catch((error: unknown) => {
@@ -114,13 +113,13 @@ export function useAppController() {
       selectPackage: (packageName: string) => withAction(() => SelectPackage(packageName), setActionError),
       setPackageScope: (scope: string) => withAction(() => SetPackageScope(scope), setActionError),
       setFilterDraft: (query: string) =>
-        SetFilterDraft(query).then((next: AppState) => setState(main.AppState.createFrom(next))),
+        SetFilterDraft(query).then((next: AppState) => setState(next)),
       setSearchQuery: (query: string) =>
-        SetSearchQuery(query).then((next: AppState) => setState(main.AppState.createFrom(next))),
+        SetSearchQuery(query).then((next: AppState) => setState(next)),
       applyFilter: async (query?: string) => {
         if (query !== undefined) {
           const next = await SetFilterDraft(query);
-          setState(main.AppState.createFrom(next));
+          setState(next);
         }
         await withAction(ApplyFilterDraft, setActionError);
       },
@@ -134,13 +133,13 @@ export function useAppController() {
         await withAction(() => CopyText(value), setActionError);
       },
       selectLog: (index: number) =>
-        SelectLog(index).then((next: AppState) => setState(main.AppState.createFrom(next))),
+        SelectLog(index).then((next: AppState) => setState(next)),
       pauseToggle: async () => {
         const next = stateRef.current.pause.active ? await ResumeKeep() : await Pause();
-        setState(main.AppState.createFrom(next));
+        setState(next);
       },
       clearVisible: () =>
-        ClearVisible().then((next: AppState) => setState(main.AppState.createFrom(next))),
+        ClearVisible().then((next: AppState) => setState(next)),
       saveFilter: async (draft: SaveFilterDraft) => {
         await withAction(
           () => SaveFilterDefinition(draft.name, draft.packageName, draft.query),

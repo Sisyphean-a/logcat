@@ -22,7 +22,6 @@ func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
 					Message:  message,
 					Raw:      raw,
 				},
-				Display: raw,
 			}},
 		},
 		VisibleCount: 1,

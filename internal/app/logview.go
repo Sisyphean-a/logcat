@@ -10,6 +10,10 @@ import (
 
 const defaultPauseBufferCap = 10000
 
+// defaultMaxLogEntries 是 allLogs 的容量上限。超过后从最旧端淘汰，使运行时
+// 内存有界。按平均一行 ~200B 估算，10 万条约 20~40MB。
+const defaultMaxLogEntries = 100000
+
 func (c *Controller) Pause() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,7 +81,7 @@ func (c *Controller) ClearVisible() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.allLogs = c.allLogs[:0]
+	c.allLogs.Reset()
 	c.model.TotalLogs = 0
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.model.SelectedIndex = -1
@@ -171,24 +175,52 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 		return
 	}
 
-	item := c.appendLogLocked(entry)
-	if c.matchesVisibleLogLocked(item, c.searchQueryLocked()) {
+	searchQuery := c.searchQueryLocked()
+	item, searchLower := c.appendLogLocked(entry)
+	if c.matchesVisibleLogLocked(item, searchLower, searchQuery) {
 		c.appendVisibleLogLocked(item)
 	}
 	c.markDirtyLocked()
 }
 
-func (c *Controller) appendLogLocked(entry logcat.LogEntry) LogViewItem {
-	display := formatLogDisplay(entry)
+func (c *Controller) appendLogLocked(entry logcat.LogEntry) (LogViewItem, string) {
 	item := LogViewItem{
-		SourceIndex: len(c.allLogs),
+		SourceIndex: c.nextSourceIndex,
 		Entry:       entry,
-		Display:     display,
-		SearchLower: searchLowerText(entry),
 	}
-	c.allLogs = append(c.allLogs, item)
-	c.model.TotalLogs = len(c.allLogs)
-	return item
+	c.nextSourceIndex++
+	searchLower := ""
+	if c.searchCacheActiveLocked() {
+		searchLower = searchLowerText(entry)
+	}
+	dropped, minSource := c.allLogs.Append(item, searchLower, c.maxLogEntries)
+	if dropped {
+		c.dropVisibleBeforeLocked(minSource)
+	}
+	c.model.TotalLogs = c.allLogs.Len()
+	return item, searchLower
+}
+
+// dropVisibleBeforeLocked 丢弃 VisibleLogs 中 SourceIndex < minSource 的前缀
+// （VisibleLogs 按 SourceIndex 单调递增），并同步 SelectedIndex 与搜索匹配。
+func (c *Controller) dropVisibleBeforeLocked(minSource int) {
+	drop := 0
+	for drop < len(c.model.VisibleLogs) && c.model.VisibleLogs[drop].SourceIndex < minSource {
+		drop++
+	}
+	if drop == 0 {
+		return
+	}
+
+	c.model.VisibleLogs = append(c.model.VisibleLogs[:0], c.model.VisibleLogs[drop:]...)
+
+	if c.model.SelectedIndex >= 0 {
+		c.model.SelectedIndex -= drop
+		if c.model.SelectedIndex < 0 {
+			c.model.SelectedIndex = -1
+		}
+	}
+	c.recomputeSearchLocked()
 }
 
 func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
@@ -252,31 +284,41 @@ func (c *Controller) updatePausedStatusLocked() {
 	c.model.Status = fmt.Sprintf("Paused，缓存 %d 条新日志", c.model.Pause.BufferedCount)
 }
 
-func formatLogDisplay(entry logcat.LogEntry) string {
+func FormatLogDisplay(entry logcat.LogEntry) string {
 	return fmt.Sprintf("%s %s %s %s", entry.TimeText, entry.Level, entry.Tag, entry.Message)
 }
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	selectedSourceIndex := c.selectedSourceIndexLocked()
 	searchQuery := c.searchQueryLocked()
+	c.syncSearchCacheLocked(searchQuery)
 	if c.compiledFilter.matchAll() && searchQuery == "" {
-		c.model.VisibleLogs = append(c.model.VisibleLogs[:0], c.allLogs...)
+		c.model.VisibleLogs = c.allLogs.AppendOrdered(c.model.VisibleLogs)
 		c.restoreSelectionLocked(selectedSourceIndex)
 		c.recomputeSearchLocked()
 		c.markDirtyLocked()
 		return
 	}
 
-	if cap(c.model.VisibleLogs) < len(c.allLogs) {
-		c.model.VisibleLogs = make([]LogViewItem, 0, len(c.allLogs))
+	if cap(c.model.VisibleLogs) < c.allLogs.Len() {
+		c.model.VisibleLogs = make([]LogViewItem, 0, c.allLogs.Len())
 	} else {
 		c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	}
-	for _, item := range c.allLogs {
-		if !c.matchesVisibleLogLocked(item, searchQuery) {
-			continue
-		}
-		c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+	if searchQuery == "" {
+		c.allLogs.Range(func(item LogViewItem) {
+			if !c.matchesVisibleLogLocked(item, "", searchQuery) {
+				return
+			}
+			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+		})
+	} else {
+		c.allLogs.RangeWithSearchLower(func(item LogViewItem, searchLower string) {
+			if !c.matchesVisibleLogLocked(item, searchLower, searchQuery) {
+				return
+			}
+			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
+		})
 	}
 	c.restoreSelectionLocked(selectedSourceIndex)
 	c.recomputeSearchLocked()
@@ -287,11 +329,11 @@ func normalizedSearchQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))
 }
 
-func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchQuery string) bool {
+func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchLower string, searchQuery string) bool {
 	if !c.compiledFilter.matchAll() && !c.matchesAppliedFilterLocked(item.Entry) {
 		return false
 	}
-	return searchQuery == "" || strings.Contains(item.SearchLower, searchQuery)
+	return searchQuery == "" || strings.Contains(searchLower, searchQuery)
 }
 
 func (c *Controller) restoreSelectionLocked(sourceIndex int) {
@@ -318,6 +360,16 @@ func (c *Controller) selectedSourceIndexLocked() int {
 	return c.model.VisibleLogs[c.model.SelectedIndex].SourceIndex
 }
 
-func searchLowerText(entry logcat.LogEntry) string {
-	return strings.ToLower(entry.Tag + "\n" + entry.Message)
+func (c *Controller) syncSearchCacheLocked(searchQuery string) {
+	if searchQuery == "" {
+		c.allLogs.ReleaseSearchCache()
+		return
+	}
+	c.allLogs.EnsureSearchCache(func(item LogViewItem) string {
+		return searchLowerText(item.Entry)
+	})
+}
+
+func (c *Controller) searchCacheActiveLocked() bool {
+	return c.searchQueryLocked() != ""
 }

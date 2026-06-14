@@ -27,7 +27,10 @@ func NewApp(controller *appstate.Controller) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.loadInitialState()
+	// 异步加载初始状态：Load 内部串行执行多个 adb 子进程调用，同步执行会
+	// 阻塞 Wails 首屏。改为 goroutine 后首屏即时渲染，设备信息经 emitState
+	// 事件推送补齐。
+	go a.loadInitialState()
 	go a.trackDevices(ctx)
 	go a.pushStateLoop(ctx)
 }
@@ -248,11 +251,9 @@ func (a *App) emitStateIfDirty() {
 func (a *App) emitAndSnapshot() AppState {
 	snapshot := a.controller.UISnapshot(uiLogWindowSize)
 	a.lastEmitRev = snapshot.Revision
-	state := newAppState(snapshot)
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, stateEventName, state)
-	}
-	return state
+	// 直返型 RPC 的调用方会直接消费返回值；这里再发同一份 state:updated
+	// 事件只会造成重复序列化、重复前端 setState 和额外瞬时内存。
+	return newAppState(snapshot)
 }
 
 func newStoppedTimer() *time.Timer {

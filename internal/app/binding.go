@@ -236,7 +236,7 @@ func (c *Controller) clearBindingViewLocked() {
 
 func (c *Controller) resetBindingViewLocked(clearLogs bool) {
 	if clearLogs {
-		c.allLogs = c.allLogs[:0]
+		c.allLogs.Reset()
 		c.model.TotalLogs = 0
 		c.model.VisibleLogs = c.model.VisibleLogs[:0]
 		c.model.SelectedIndex = -1

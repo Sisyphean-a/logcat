@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -650,6 +651,32 @@ func TestControllerSearchUsesTagAndMessageOnly(t *testing.T) {
 	}
 	if model.VisibleLogs[0].Entry.Tag != "jsbridge" {
 		t.Fatalf("expected tag match to remain, got %q", model.VisibleLogs[0].Entry.Tag)
+	}
+}
+
+func TestControllerSearchPreservesUnicodeCaseFold(t *testing.T) {
+	events := make(chan session.Event, 2)
+	controller := newStreamingController(t, events)
+
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-04 16:42:18.479",
+		Level:    "I",
+		Tag:      "Ömega",
+		Message:  "桥已连接",
+		Raw:      "Ömega 桥已连接",
+	}}
+
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 1
+	})
+
+	controller.SetSearchQuery("öMEGA")
+	model := controller.Model()
+	if len(model.VisibleLogs) != 1 {
+		t.Fatalf("expected unicode case-fold search to match tag, got %d", len(model.VisibleLogs))
+	}
+	if model.VisibleLogs[0].Entry.Tag != "Ömega" {
+		t.Fatalf("expected unicode tag preserved, got %q", model.VisibleLogs[0].Entry.Tag)
 	}
 }
 
@@ -1434,4 +1461,56 @@ func waitFor(t *testing.T, check func() bool) {
 	}
 
 	t.Fatal("condition not met before timeout")
+}
+
+func TestControllerCapsLogEntries(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.maxLogEntries = 3
+	controller.model.Pause.Active = false
+
+	for i := 0; i < 5; i++ {
+		controller.pushEntry(logcat.LogEntry{Message: fmt.Sprintf("line-%d", i)})
+	}
+
+	model := controller.Model()
+	if model.TotalLogs != 3 {
+		t.Fatalf("expected TotalLogs capped at 3, got %d", model.TotalLogs)
+	}
+	if len(model.VisibleLogs) != 3 {
+		t.Fatalf("expected 3 visible logs, got %d", len(model.VisibleLogs))
+	}
+	if got := model.VisibleLogs[0].Entry.Message; got != "line-2" {
+		t.Fatalf("expected oldest kept to be line-2, got %q", got)
+	}
+	if got := model.VisibleLogs[2].Entry.Message; got != "line-4" {
+		t.Fatalf("expected newest to be line-4, got %q", got)
+	}
+}
+
+func TestControllerCapDropsSelectedAndShiftsSelection(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.maxLogEntries = 3
+	controller.model.Pause.Active = false
+
+	for i := 0; i < 3; i++ {
+		controller.pushEntry(logcat.LogEntry{Message: fmt.Sprintf("line-%d", i)})
+	}
+
+	// 选中最旧（line-0），淘汰后它被丢弃，选中态应失效为 -1。
+	controller.SelectLog(0)
+	controller.pushEntry(logcat.LogEntry{Message: "line-3"})
+	if got := controller.Model().SelectedIndex; got != -1 {
+		t.Fatalf("expected selection cleared after selected entry dropped, got %d", got)
+	}
+
+	// 选中末尾（line-3），再淘汰一条，选中态应左移仍指向 line-3。
+	controller.SelectLog(2)
+	controller.pushEntry(logcat.LogEntry{Message: "line-4"})
+	model := controller.Model()
+	if model.SelectedIndex != 1 {
+		t.Fatalf("expected selection shifted to index 1, got %d", model.SelectedIndex)
+	}
+	if got := model.VisibleLogs[model.SelectedIndex].Entry.Message; got != "line-3" {
+		t.Fatalf("expected selection to still point at line-3, got %q", got)
+	}
 }

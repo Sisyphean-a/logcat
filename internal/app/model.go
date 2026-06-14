@@ -19,10 +19,8 @@ type SavedFilter struct {
 }
 
 type LogViewItem struct {
-	Entry        logcat.LogEntry
-	SourceIndex  int
-	Display      string
-	SearchLower  string
+	Entry       logcat.LogEntry
+	SourceIndex int
 }
 
 type FilterState struct {

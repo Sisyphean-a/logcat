@@ -79,7 +79,7 @@ type LogItemView struct {
 	Message    string `json:"message"`
 	Source     string `json:"source"`
 	Raw        string `json:"raw"`
-	Display    string `json:"display"`
+	Display    string `json:"display,omitempty"`
 	IsMatch    bool   `json:"isMatch"`
 	IsCurrent  bool   `json:"isCurrent"`
 	IsSelected bool   `json:"isSelected"`
@@ -98,17 +98,18 @@ type SelectedLogView struct {
 
 func newAppState(snapshot appstate.UISnapshot) AppState {
 	model := snapshot.Model
+	matchIndexes := model.Search.MatchIndexes
 	state := AppState{
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
-		Devices:         make([]DeviceView, 0, len(model.Devices)),
+		Devices:         make([]DeviceView, len(model.Devices)),
 		SelectedDevice:  model.SelectedDevice,
 		PackageScope:    string(model.PackageScope),
-		Packages:        make([]PackageView, 0, len(model.Packages)),
+		Packages:        make([]PackageView, len(model.Packages)),
 		SelectedPackage: model.SelectedPackage,
-		Processes:       make([]ProcessView, 0, len(model.Processes)),
+		Processes:       make([]ProcessView, len(model.Processes)),
 		SelectedProcess: model.SelectedProcess,
-		BoundPIDs:       append([]int(nil), model.BoundPIDs...),
+		BoundPIDs:       model.BoundPIDs,
 		TotalLogs:       model.TotalLogs,
 		VisibleCount:    snapshot.VisibleCount,
 		VisibleStart:    snapshot.VisibleStart,
@@ -119,12 +120,12 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			Error:           model.Filter.Error,
 			ActiveFilterID:  model.Filter.ActiveFilterID,
 			DefaultFilterID: model.Filter.DefaultFilterID,
-			Saved:           make([]SavedFilterView, 0, len(model.Filter.Saved)),
-			History:         append([]string(nil), model.Filter.History...),
+			Saved:           make([]SavedFilterView, len(model.Filter.Saved)),
+			History:         model.Filter.History,
 		},
 		Search: SearchView{
 			Query:        model.Search.Query,
-			MatchIndexes: append([]int(nil), model.Search.MatchIndexes...),
+			MatchIndexes: matchIndexes,
 			Current:      model.Search.Current,
 		},
 		Pause: PauseView{
@@ -132,50 +133,59 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			BufferedCount: model.Pause.BufferedCount,
 			DroppedCount:  model.Pause.DroppedCount,
 		},
-		Logs: make([]LogItemView, 0, len(model.VisibleLogs)),
-	}
-
-	matchSet := make(map[int]struct{}, len(model.Search.MatchIndexes))
-	for _, index := range model.Search.MatchIndexes {
-		matchSet[index] = struct{}{}
+		Logs: make([]LogItemView, len(model.VisibleLogs)),
 	}
 
 	currentMatch := -1
-	if model.Search.Current >= 0 && model.Search.Current < len(model.Search.MatchIndexes) {
-		currentMatch = model.Search.MatchIndexes[model.Search.Current]
+	if model.Search.Current >= 0 && model.Search.Current < len(matchIndexes) {
+		currentMatch = matchIndexes[model.Search.Current]
+	}
+	nextMatchPos := 0
+	nextMatch := -1
+	if len(matchIndexes) > 0 {
+		nextMatch = matchIndexes[0]
 	}
 
-	for _, device := range model.Devices {
-		state.Devices = append(state.Devices, DeviceView{
+	for index, device := range model.Devices {
+		state.Devices[index] = DeviceView{
 			ID:     device.ID,
 			Model:  device.Model,
 			Status: device.Status,
-		})
+		}
 	}
 
-	for _, pkg := range model.Packages {
-		state.Packages = append(state.Packages, PackageView{Name: pkg.Name})
+	for index, pkg := range model.Packages {
+		state.Packages[index] = PackageView{Name: pkg.Name}
 	}
 
-	for _, process := range model.Processes {
-		state.Processes = append(state.Processes, ProcessView{
+	for index, process := range model.Processes {
+		state.Processes[index] = ProcessView{
 			PID:  process.PID,
 			Name: process.Name,
-		})
+		}
 	}
 
-	for _, filter := range model.Filter.Saved {
-		state.Filter.Saved = append(state.Filter.Saved, SavedFilterView{
+	for index, filter := range model.Filter.Saved {
+		state.Filter.Saved[index] = SavedFilterView{
 			ID:          filter.ID,
 			Name:        filter.Name,
 			PackageName: filter.PackageName,
 			Query:       filter.Query,
-		})
+		}
 	}
 
 	for offset, item := range model.VisibleLogs {
 		index := snapshot.VisibleStart + offset
-		_, isMatch := matchSet[index]
+		isMatch := index == nextMatch
+		if isMatch {
+			nextMatchPos++
+			if nextMatchPos < len(matchIndexes) {
+				nextMatch = matchIndexes[nextMatchPos]
+			} else {
+				nextMatch = -1
+			}
+		}
+		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
 			Index:      index,
 			TimeText:   item.Entry.TimeText,
@@ -184,12 +194,11 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			Message:    item.Entry.Message,
 			Source:     item.Entry.Source,
 			Raw:        item.Entry.Raw,
-			Display:    item.Display,
 			IsMatch:    isMatch,
 			IsCurrent:  currentMatch == index,
 			IsSelected: model.SelectedIndex == index,
 		}
-		state.Logs = append(state.Logs, row)
+		state.Logs[offset] = row
 		if row.IsSelected {
 			state.SelectedLog = &SelectedLogView{
 				Index:    index,
@@ -197,9 +206,9 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 				Level:    row.Level,
 				Tag:      row.Tag,
 				Message:  row.Message,
-				Source:   row.Source,
-				Raw:      row.Raw,
-				Display:  row.Display,
+				Source:   item.Entry.Source,
+				Raw:      item.Entry.Raw,
+				Display:  display,
 			}
 		}
 	}

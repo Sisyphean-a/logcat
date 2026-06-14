@@ -1,6 +1,10 @@
 package app
 
-import "github.com/xiakn/logcat/internal/adb"
+import (
+	"sort"
+
+	"github.com/xiakn/logcat/internal/adb"
+)
 
 type UISnapshot struct {
 	Model        Model
@@ -50,24 +54,10 @@ func visibleWindowStart(size int, limit int) int {
 }
 
 func sliceSearchWindow(matchIndexes []int, current int, start int) ([]int, int) {
-	windowMatches := make([]int, 0, len(matchIndexes))
-	windowCurrent := -1
-	for _, index := range matchIndexes {
-		if index < start {
-			continue
-		}
-		windowMatches = append(windowMatches, index)
+	startPos := sort.SearchInts(matchIndexes, start)
+	windowMatches := append([]int(nil), matchIndexes[startPos:]...)
+	if current < startPos || current >= len(matchIndexes) {
+		return windowMatches, -1
 	}
-	if current < 0 || current >= len(matchIndexes) {
-		return windowMatches, windowCurrent
-	}
-
-	currentIndex := matchIndexes[current]
-	for matchPos, index := range windowMatches {
-		if index == currentIndex {
-			windowCurrent = matchPos
-			break
-		}
-	}
-	return windowMatches, windowCurrent
+	return windowMatches, current - startPos
 }
