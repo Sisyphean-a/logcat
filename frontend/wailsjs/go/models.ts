@@ -57,7 +57,7 @@ export namespace main {
 	    message: string;
 	    source: string;
 	    raw: string;
-	    display: string;
+	    display?: string;
 	    isMatch: boolean;
 	    isCurrent: boolean;
 	    isSelected: boolean;

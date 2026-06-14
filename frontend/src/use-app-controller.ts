@@ -340,8 +340,12 @@ function buildPreviewSelectedLog(log?: main.LogItemView) {
     message: log.message,
     source: log.source,
     raw: log.raw,
-    display: log.display,
+    display: log.display ?? formatPreviewLogDisplay(log),
   };
+}
+
+function formatPreviewLogDisplay(log: Pick<main.LogItemView, "timeText" | "level" | "tag" | "message">) {
+  return `${log.timeText} ${log.level} ${log.tag} ${log.message}`;
 }
 
 function currentPreviewSelectionRaw(state: AppState) {
