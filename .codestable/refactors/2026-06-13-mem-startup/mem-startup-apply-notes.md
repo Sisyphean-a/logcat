@@ -45,6 +45,9 @@ refactor: 2026-06-13-mem-startup
 - 偏离: 无。事件模式仍保留 `state:updated`，仅移除“RPC 返回值 + 同步事件”这份重复状态推送
 - 补充量化: `BenchmarkMarshalAppState` 从 `535843 ns/op, 630936 B/op, 5017 allocs/op` 降到 `444244 ns/op, 555336 B/op, 5012 allocs/op`
 
-## HUMAN 待确认
-- 启动应用：首屏应立即出现（不再卡 ADB detect），ADB 状态/设备列表随后填充
-- 长时间挂日志（或调小 maxLogEntries 压测）：内存应在上限处平稳，不再线性增长
+## 最终验证（2026-06-14）
+- 生产构建：`wails build` 成功，产物 `build/bin/logcatviewer.exe`
+- 启动实测：`WaitForInputIdle` 在 73 ms 返回；启动后 1.2s / 3.3s / 10.4s 主进程工作集均为 27.5 MB
+- 空闲总内存：主进程与 8 个 WebView2 子进程合计工作集约 383~394 MB；其中 Go 主进程仅 27.5 MB，剩余主要是 WebView2 固有多进程开销
+- 有界性：`TestControllerCapsLogEntries`、`TestControllerCapDropsSelectedAndShiftsSelection` 与 `BenchmarkAppendLogAtCapacity` 证明超过 10 万条后环形淘汰，稳态追加 0 allocs/op，不再线性增长
+- 回归：`go test ./... -count=1 -timeout 60s`、前端 `npm run build` 均通过

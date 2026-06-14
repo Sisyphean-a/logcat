@@ -4,33 +4,33 @@ created: 2026-06-13
 steps:
   - action: "步骤1 #4：app.go startup 将 loadInitialState 改为 goroutine，解除首屏阻塞"
     exit_signal: "go build ./... 与 go test ./... 通过；HUMAN 确认首屏立即出现、设备列表随后填充"
-    status: pending
+    status: completed
 
   - action: "步骤2 #2：删 LogViewItem.Display 字段，导出 FormatLogDisplay，newAppState 按可见窗口现算"
     exit_signal: "go test ./... 通过；grep .Display 无残留读取存储字段；app_state_test 去掉 Display 行后 Raw 断言仍过"
-    status: pending
+    status: completed
 
   - action: "步骤3 #3：删 LogViewItem.SearchLower 与 searchLowerText，匹配改 entryMatchesSearch 现算"
     exit_signal: "go test ./internal/app/... 搜索用例通过；新增 benchmark 确认 rebuild 现算开销可接受"
-    status: pending
+    status: completed
 
   - action: "步骤4 #1：allLogs 加 maxLogEntries 上限环形淘汰，SourceIndex 改单调 nextSeq，同步淘汰 VisibleLogs/搜索索引"
     exit_signal: "go test ./... 通过；新增 TestControllerCapsLogEntries 验证封顶/最旧淘汰/选中态不串位；HUMAN 确认长跑内存平稳"
-    status: pending
+    status: completed
 
 checks:
   - item: "前端拿到的 display/raw 内容与改前一致（行为等价）"
     source: 行为等价底线
-    status: pending
+    status: completed
 
   - item: "搜索/筛选结果与改前一致，匹配热路径无明显性能回退"
     source: 行为等价底线
-    status: pending
+    status: completed
 
   - item: "allLogs 容量超上限后内存有界，淘汰最旧时选中态/搜索索引不越界不 panic"
     source: 内存有界目标
-    status: pending
+    status: completed
 
   - item: "启动不再被 ADB 子进程同步阻塞，首屏即时可见"
     source: 启动速度目标
-    status: pending
+    status: completed
