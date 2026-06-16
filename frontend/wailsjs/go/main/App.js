@@ -18,6 +18,14 @@ export function ClearVisible() {
   return window['go']['main']['App']['ClearVisible']();
 }
 
+export function CopyAllVisibleLogs() {
+  return window['go']['main']['App']['CopyAllVisibleLogs']();
+}
+
+export function CopySelectedLogs() {
+  return window['go']['main']['App']['CopySelectedLogs']();
+}
+
 export function CopyText(arg1) {
   return window['go']['main']['App']['CopyText'](arg1);
 }
@@ -72,6 +80,10 @@ export function SelectForegroundPackage() {
 
 export function SelectLog(arg1) {
   return window['go']['main']['App']['SelectLog'](arg1);
+}
+
+export function SelectLogs(arg1) {
+  return window['go']['main']['App']['SelectLogs'](arg1);
 }
 
 export function SelectPackage(arg1) {

@@ -45,6 +45,12 @@ type PauseState struct {
 	DroppedCount  int
 }
 
+type SelectionState struct {
+	AnchorSourceIndex int
+	FocusSourceIndex  int
+	SourceIndexes     []int
+}
+
 type Model struct {
 	Status          string
 	ADBStatus       string
@@ -62,6 +68,7 @@ type Model struct {
 	Search          SearchState
 	Pause           PauseState
 	SelectedIndex   int
+	Selection       SelectionState
 }
 
 func NewModel() Model {
@@ -84,9 +91,14 @@ func NewModel() Model {
 			ActiveFilterID:  "",
 			DefaultFilterID: "",
 			Saved:           []SavedFilter{},
-		},
-		Search:        SearchState{MatchIndexes: []int{}, Current: -1},
-		Pause:         PauseState{Active: true},
-		SelectedIndex: -1,
-	}
+			},
+			Search: SearchState{MatchIndexes: []int{}, Current: -1},
+			Pause:  PauseState{Active: true},
+			Selection: SelectionState{
+				AnchorSourceIndex: -1,
+				FocusSourceIndex:  -1,
+				SourceIndexes:     []int{},
+			},
+			SelectedIndex: -1,
+		}
 }

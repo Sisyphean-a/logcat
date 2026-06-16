@@ -104,12 +104,16 @@ export default function App() {
             loading={loading}
             logs={state.logs}
             searchQuery={state.search.query}
+            selectedCount={state.selectedCount}
             visibleCount={state.visibleCount}
             scrollTop={scrollTop}
             viewportHeight={viewportHeight}
             tableRef={tableRef}
             onScroll={handleScroll}
-            onSelectLog={(index) => void api.selectLog(index)}
+            onSelectLog={(index, mode) => void api.selectLogs(index, mode)}
+            onCopySelected={() => void api.copySelectedLogs()}
+            onCopyAll={() => void api.copyAllVisibleLogs()}
+            onClearVisible={() => void api.clearVisible()}
           />
         </section>
 

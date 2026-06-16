@@ -23,6 +23,7 @@ type AppState struct {
 	Search          SearchView       `json:"search"`
 	Pause           PauseView        `json:"pause"`
 	SelectedIndex   int              `json:"selectedIndex"`
+	SelectedCount   int              `json:"selectedCount"`
 	Logs            []LogItemView    `json:"logs"`
 	SelectedLog     *SelectedLogView `json:"selectedLog"`
 }
@@ -82,6 +83,7 @@ type LogItemView struct {
 	Display    string `json:"display,omitempty"`
 	IsMatch    bool   `json:"isMatch"`
 	IsCurrent  bool   `json:"isCurrent"`
+	IsFocused  bool   `json:"isFocused"`
 	IsSelected bool   `json:"isSelected"`
 }
 
@@ -114,6 +116,7 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		VisibleCount:    snapshot.VisibleCount,
 		VisibleStart:    snapshot.VisibleStart,
 		SelectedIndex:   model.SelectedIndex,
+		SelectedCount:   len(model.Selection.SourceIndexes),
 		Filter: FilterView{
 			Draft:           model.Filter.Draft,
 			Applied:         model.Filter.Applied,
@@ -139,6 +142,12 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 	currentMatch := -1
 	if model.Search.Current >= 0 && model.Search.Current < len(matchIndexes) {
 		currentMatch = matchIndexes[model.Search.Current]
+	}
+	focusedSourceIndex := model.Selection.FocusSourceIndex
+	selectedPos := 0
+	nextSelectedSource := -1
+	if len(model.Selection.SourceIndexes) > 0 {
+		nextSelectedSource = model.Selection.SourceIndexes[0]
 	}
 	nextMatchPos := 0
 	nextMatch := -1
@@ -185,6 +194,15 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 				nextMatch = -1
 			}
 		}
+		isSelected := item.SourceIndex == nextSelectedSource
+		if isSelected {
+			selectedPos++
+			if selectedPos < len(model.Selection.SourceIndexes) {
+				nextSelectedSource = model.Selection.SourceIndexes[selectedPos]
+			} else {
+				nextSelectedSource = -1
+			}
+		}
 		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
 			Index:      index,
@@ -196,10 +214,11 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			Raw:        item.Entry.Raw,
 			IsMatch:    isMatch,
 			IsCurrent:  currentMatch == index,
-			IsSelected: model.SelectedIndex == index,
+			IsFocused:  item.SourceIndex == focusedSourceIndex,
+			IsSelected: isSelected,
 		}
 		state.Logs[offset] = row
-		if row.IsSelected {
+		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
 				Index:    index,
 				TimeText: row.TimeText,

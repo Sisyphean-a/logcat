@@ -11,6 +11,10 @@ export function ApplySavedFilter(arg1:string):Promise<void>;
 
 export function ClearVisible():Promise<main.AppState>;
 
+export function CopyAllVisibleLogs():Promise<void>;
+
+export function CopySelectedLogs():Promise<void>;
+
 export function CopyText(arg1:string):Promise<void>;
 
 export function ExportVisibleLogs():Promise<string>;
@@ -38,6 +42,8 @@ export function SelectDevice(arg1:string):Promise<void>;
 export function SelectForegroundPackage():Promise<void>;
 
 export function SelectLog(arg1:number):Promise<main.AppState>;
+
+export function SelectLogs(arg1:main.LogSelectionRequest):Promise<main.AppState>;
 
 export function SelectPackage(arg1:string):Promise<void>;
 

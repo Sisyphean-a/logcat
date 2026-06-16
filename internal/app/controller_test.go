@@ -1514,3 +1514,57 @@ func TestControllerCapDropsSelectedAndShiftsSelection(t *testing.T) {
 		t.Fatalf("expected selection to still point at line-3, got %q", got)
 	}
 }
+
+func TestControllerSelectLogWithModesSupportsAddAndRange(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.model.Pause.Active = false
+
+	for i := 0; i < 5; i++ {
+		controller.pushEntry(logcat.LogEntry{Message: fmt.Sprintf("line-%d", i)})
+	}
+
+	controller.SelectLogWithMode(1, SelectionModeReplace)
+	controller.SelectLogWithMode(3, SelectionModeAdd)
+	model := controller.Model()
+	if len(model.Selection.SourceIndexes) != 2 {
+		t.Fatalf("expected 2 selected rows after ctrl add, got %#v", model.Selection.SourceIndexes)
+	}
+
+	controller.SelectLogWithMode(4, SelectionModeRange)
+	model = controller.Model()
+	if len(model.Selection.SourceIndexes) != 2 {
+		t.Fatalf("expected range selection from previous focus to next focus, got %#v", model.Selection.SourceIndexes)
+	}
+	if model.SelectedIndex != 4 {
+		t.Fatalf("expected focus on row 4, got %d", model.SelectedIndex)
+	}
+}
+
+func TestControllerCopyTextUsesVisibleOrder(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.model.Pause.Active = false
+
+	for i := 0; i < 4; i++ {
+		controller.pushEntry(logcat.LogEntry{
+			TimeText: "06-04 16:42:18.479",
+			Level:    "I",
+			Tag:      "chromium",
+			Message:  fmt.Sprintf("line-%d", i),
+		})
+	}
+
+	controller.SelectLogWithMode(1, SelectionModeReplace)
+	controller.SelectLogWithMode(3, SelectionModeAdd)
+	selectedText := controller.SelectedLogsText()
+	if !strings.Contains(selectedText, "line-1") || !strings.Contains(selectedText, "line-3") {
+		t.Fatalf("expected selected text to include selected rows, got %q", selectedText)
+	}
+	if strings.Contains(selectedText, "line-0") || strings.Contains(selectedText, "line-2") {
+		t.Fatalf("expected selected text to exclude unselected rows, got %q", selectedText)
+	}
+
+	allText := controller.VisibleLogsText()
+	if !strings.Contains(allText, "line-0") || !strings.Contains(allText, "line-3") {
+		t.Fatalf("expected visible text to include every row, got %q", allText)
+	}
+}

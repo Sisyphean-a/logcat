@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -19,6 +20,11 @@ type App struct {
 	ctx         context.Context
 	controller  *appstate.Controller
 	lastEmitRev uint64
+}
+
+type LogSelectionRequest struct {
+	Index int                    `json:"index"`
+	Mode  appstate.SelectionMode `json:"mode"`
 }
 
 func NewApp(controller *appstate.Controller) *App {
@@ -163,6 +169,19 @@ func (a *App) SelectLog(index int) AppState {
 	return a.emitAndSnapshot()
 }
 
+func (a *App) SelectLogs(request LogSelectionRequest) AppState {
+	a.controller.SelectLogWithMode(request.Index, request.Mode)
+	return a.emitAndSnapshot()
+}
+
+func (a *App) CopySelectedLogs() error {
+	return a.CopyText(a.controller.SelectedLogsText())
+}
+
+func (a *App) CopyAllVisibleLogs() error {
+	return a.CopyText(a.controller.VisibleLogsText())
+}
+
 func (a *App) ExportVisibleLogs() (string, error) {
 	logs := a.controller.VisibleLogsSnapshot()
 	path, err := storage.ExportVisibleLogs(logs)
@@ -181,6 +200,9 @@ func (a *App) ExportVisibleLogs() (string, error) {
 func (a *App) CopyText(value string) error {
 	if a.ctx == nil {
 		return fmt.Errorf("runtime_not_ready")
+	}
+	if strings.TrimSpace(value) == "" {
+		return nil
 	}
 	return runtime.ClipboardSetText(a.ctx, value)
 }

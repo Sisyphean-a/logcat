@@ -11,5 +11,6 @@ func cloneModel(model Model) Model {
 	cloned.VisibleLogs = append([]LogViewItem(nil), model.VisibleLogs...)
 	cloned.Filter = cloneFilterState(model.Filter)
 	cloned.Search.MatchIndexes = append([]int(nil), model.Search.MatchIndexes...)
+	cloned.Selection.SourceIndexes = append([]int(nil), model.Selection.SourceIndexes...)
 	return cloned
 }

@@ -6,6 +6,8 @@ import {
   ApplyFilterDraft,
   ApplySavedFilter,
   ClearVisible,
+  CopyAllVisibleLogs,
+  CopySelectedLogs,
   CopyText,
   ExportVisibleLogs,
   GetState,
@@ -15,6 +17,7 @@ import {
   SaveFilterDefinition,
   SelectDevice,
   SelectLog,
+  SelectLogs,
   SelectPackage,
   SetFilterDraft,
   SetPackageScope,
@@ -25,6 +28,7 @@ import { type SaveFilterDraft } from "./filter-rule-builder";
 import { type SavedFiltersDraft } from "./saved-filter-types";
 
 export type AppState = main.AppState;
+export type LogSelectionMode = "replace" | "add" | "range";
 
 const stateEventName = "state:updated";
 
@@ -132,8 +136,12 @@ export function useAppController() {
         const value = kind === "raw" ? selected.raw : kind === "message" ? selected.message : selected.display;
         await withAction(() => CopyText(value), setActionError);
       },
+      copySelectedLogs: () => withAction(CopySelectedLogs, setActionError),
+      copyAllVisibleLogs: () => withAction(CopyAllVisibleLogs, setActionError),
       selectLog: (index: number) =>
         SelectLog(index).then((next: AppState) => setState(next)),
+      selectLogs: (index: number, mode: LogSelectionMode) =>
+        SelectLogs({ index, mode }).then((next: AppState) => setState(next)),
       pauseToggle: async () => {
         const next = stateRef.current.pause.active ? await ResumeKeep() : await Pause();
         setState(next);
@@ -169,6 +177,36 @@ export function useAppController() {
     // 避免流式每帧重建 api 击穿子组件 memo；预览模式无流式，仍依赖 state。
     [isWailsRuntime() ? null : state],
   );
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+      const command = event.ctrlKey || event.metaKey;
+      if (!command) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "c" && event.shiftKey) {
+        event.preventDefault();
+        void api.copyAllVisibleLogs();
+        return;
+      }
+      if (key === "c" && stateRef.current.selectedCount > 0) {
+        event.preventDefault();
+        void api.copySelectedLogs();
+        return;
+      }
+      if (key === "l") {
+        event.preventDefault();
+        void api.clearVisible();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [api]);
 
   function handleScroll() {
     const node = tableRef.current;
@@ -241,6 +279,16 @@ async function withAction<T>(action: () => Promise<T>, setError: (value: string)
   }
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+}
+
 const emptyState = new main.AppState({
   status: "loading",
   adbStatus: "未连接",
@@ -275,6 +323,7 @@ const emptyState = new main.AppState({
     droppedCount: 0,
   },
   selectedIndex: -1,
+  selectedCount: 0,
   logs: [],
 });
 
@@ -296,36 +345,72 @@ function buildPreviewSearchState(
     index,
     isMatch: false,
     isCurrent: false,
+    isFocused: false,
     isSelected: false,
   }));
   next.visibleCount = next.logs.length;
   next.visibleStart = 0;
-  syncPreviewSelection(next, selectedRaw, Boolean(normalizedQuery));
+  syncPreviewSelection(next, { raw: selectedRaw, mode: "replace" }, Boolean(normalizedQuery));
   return next;
 }
 
 function syncPreviewSelection(
   state: AppState,
-  preferredRaw: string,
+  request: { raw: string; mode: LogSelectionMode },
   preferFirstResult: boolean,
 ) {
   const hasSearch = normalizePreviewSearchQuery(state.search.query).length > 0;
   state.search.matchIndexes = hasSearch ? state.logs.map((item) => item.index) : [];
-
-  const selectedIndex = preferredRaw
-    ? state.logs.findIndex((item) => item.raw === preferredRaw)
+  const targetIndex = request.raw
+    ? state.logs.findIndex((item) => item.raw === request.raw)
     : -1;
   const fallbackIndex = preferFirstResult && state.logs.length > 0 ? 0 : -1;
-  state.selectedIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex;
-  state.search.current = hasSearch && state.selectedIndex >= 0 ? state.selectedIndex : -1;
+  const nextFocusedIndex = targetIndex >= 0 ? targetIndex : fallbackIndex;
+  const previousFocusedIndex = state.logs.findIndex((item) => item.isFocused);
+  const previousAnchorIndex = state.logs.findIndex((item) => item.isSelected);
+  const selected = new Set(
+    state.logs.filter((item) => item.isSelected).map((item) => item.raw),
+  );
 
+  if (nextFocusedIndex >= 0) {
+    const focusedRaw = state.logs[nextFocusedIndex].raw;
+    switch (request.mode) {
+      case "add":
+        if (selected.has(focusedRaw)) {
+          selected.delete(focusedRaw);
+        } else {
+          selected.add(focusedRaw);
+        }
+        break;
+      case "range": {
+        const anchor = previousAnchorIndex >= 0 ? previousAnchorIndex : previousFocusedIndex;
+        const start = anchor >= 0 ? Math.min(anchor, nextFocusedIndex) : nextFocusedIndex;
+        const end = anchor >= 0 ? Math.max(anchor, nextFocusedIndex) : nextFocusedIndex;
+        selected.clear();
+        for (let index = start; index <= end; index++) {
+          selected.add(state.logs[index].raw);
+        }
+        break;
+      }
+      default:
+        selected.clear();
+        selected.add(focusedRaw);
+    }
+  } else {
+    selected.clear();
+  }
+
+  state.selectedIndex = nextFocusedIndex;
+  state.selectedCount = selected.size;
+  state.search.current = hasSearch && nextFocusedIndex >= 0 ? nextFocusedIndex : -1;
   state.logs = state.logs.map((item, index) => {
-    item.isSelected = index === state.selectedIndex;
+    item.isSelected = selected.has(item.raw);
+    item.isFocused = index === nextFocusedIndex;
     item.isCurrent = hasSearch && index === state.search.current;
     item.isMatch = false;
     return item;
   });
-  state.selectedLog = buildPreviewSelectedLog(state.logs[state.selectedIndex]);
+  state.selectedLog = buildPreviewSelectedLog(state.logs[nextFocusedIndex]);
 }
 
 function buildPreviewSelectedLog(log?: main.LogItemView) {
@@ -353,6 +438,10 @@ function currentPreviewSelectionRaw(state: AppState) {
     return state.selectedLog.raw;
   }
   return state.selectedIndex >= 0 ? state.logs[state.selectedIndex]?.raw || "" : "";
+}
+
+function joinPreviewLogs(logs: main.LogItemView[]) {
+  return logs.map((item) => item.display ?? formatPreviewLogDisplay(item)).join("\n");
 }
 
 function normalizePreviewSearchQuery(query: string) {
@@ -417,9 +506,21 @@ function createPreviewApi(
     },
     exportVisible: async () => setError("浏览器预览模式不执行导出"),
     copySelected: async () => undefined,
+    copySelectedLogs: async () => {
+      const selected = state.logs.filter((item) => item.isSelected);
+      await navigator.clipboard.writeText(joinPreviewLogs(selected));
+    },
+    copyAllVisibleLogs: async () => {
+      await navigator.clipboard.writeText(joinPreviewLogs(state.logs));
+    },
     selectLog: async (index: number) => {
       const next = main.AppState.createFrom(state);
-      syncPreviewSelection(next, index >= 0 ? next.logs[index]?.raw || "" : "", false);
+      syncPreviewSelection(next, { raw: index >= 0 ? next.logs[index]?.raw || "" : "", mode: "replace" }, false);
+      setState(next);
+    },
+    selectLogs: async (index: number, mode: LogSelectionMode) => {
+      const next = main.AppState.createFrom(state);
+      syncPreviewSelection(next, { raw: index >= 0 ? next.logs[index]?.raw || "" : "", mode }, false);
       setState(next);
     },
     pauseToggle: async () => {
@@ -435,6 +536,7 @@ function createPreviewApi(
       next.visibleCount = 0;
       next.visibleStart = 0;
       next.selectedIndex = -1;
+      next.selectedCount = 0;
       next.selectedLog = undefined;
       setState(next);
     },

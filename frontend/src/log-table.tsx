@@ -1,20 +1,40 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from "react";
 import { LogRow, type LogItemView } from "./log-row";
+import { type LogSelectionMode } from "./use-app-controller";
 
 type LogTableProps = {
   fontSize: number;
   loading: boolean;
   logs: LogItemView[];
   searchQuery: string;
+  selectedCount: number;
   visibleCount: number;
   scrollTop: number;
   viewportHeight: number;
   tableRef: RefObject<HTMLDivElement>;
   onScroll: () => void;
-  onSelectLog: (index: number) => void;
+  onSelectLog: (index: number, mode: LogSelectionMode) => void;
+  onCopySelected: () => void;
+  onCopyAll: () => void;
+  onClearVisible: () => void;
 };
 
 type ColumnKey = "time" | "level" | "tag";
+type ContextMenuState = {
+  x: number;
+  y: number;
+  hasSelection: boolean;
+};
+
 const columnMinWidths: Record<ColumnKey, number> = {
   time: 84,
   level: 40,
@@ -41,17 +61,25 @@ export function LogTable({
   loading,
   logs,
   searchQuery,
+  selectedCount,
   visibleCount,
   scrollTop,
   viewportHeight,
   tableRef,
   onScroll,
   onSelectLog,
+  onCopySelected,
+  onCopyAll,
+  onClearVisible,
 }: LogTableProps) {
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const onSelectLogRef = useRef(onSelectLog);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   onSelectLogRef.current = onSelectLog;
-  const handleSelect = useCallback((index: number) => onSelectLogRef.current(index), []);
+  const handleSelect = useCallback((index: number, mode: LogSelectionMode) => {
+    onSelectLogRef.current(index, mode);
+  }, []);
   const rowHeight = resolveRowHeight(fontSize);
   const chipBox = Math.max(18, fontSize + 8);
   const chipSize = Math.max(10, fontSize - 1);
@@ -85,6 +113,35 @@ export function LogTable({
   const topSpacer = start * rowHeight;
   const bottomSpacer = Math.max(0, (logs.length - end) * rowHeight);
 
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    function handlePointerDown(event: Event) {
+      const target = event.target;
+      if (target instanceof Node && contextMenuRef.current?.contains(target)) {
+        return;
+      }
+      setContextMenu(null);
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("scroll", handlePointerDown, true);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("scroll", handlePointerDown, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [contextMenu]);
+
   function startResize(key: ColumnKey, event: ReactMouseEvent<HTMLButtonElement>) {
     event.preventDefault();
 
@@ -112,6 +169,36 @@ export function LogTable({
     window.addEventListener("mouseup", handleUp);
   }
 
+  function openContextMenu(event: ReactMouseEvent<HTMLButtonElement>, index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = logs[index];
+    if (!row) {
+      return;
+    }
+    if (!row.isSelected) {
+      handleSelect(index, "replace");
+    }
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      hasSelection: (row.isSelected ? selectedCount : 1) > 0,
+    });
+  }
+
+  function closeContextMenu() {
+    setContextMenu(null);
+  }
+
+  function openBodyContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      hasSelection: selectedCount > 0,
+    });
+  }
+
   return (
     <div className="table-shell" style={shellStyle}>
       <div className="table-head">
@@ -121,7 +208,7 @@ export function LogTable({
         <span className="table-head-cell table-head-cell-fill">消息</span>
       </div>
 
-      <div className="table-body" ref={tableRef} onScroll={onScroll}>
+      <div className="table-body" ref={tableRef} onScroll={onScroll} onContextMenu={openBodyContextMenu}>
         {loading ? (
           <div className="placeholder">正在加载状态…</div>
         ) : visibleCount === 0 ? (
@@ -134,12 +221,37 @@ export function LogTable({
                 log={log}
                 index={log.index}
                 onSelect={handleSelect}
+                onContextMenu={openContextMenu}
                 searchQuery={searchQuery}
               />
             ))}
           </div>
         )}
       </div>
+
+      {contextMenu ? (
+        <div
+          className="log-context-menu"
+          ref={contextMenuRef}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+        >
+          {contextMenu.hasSelection ? (
+            <button className="log-context-item" type="button" onClick={() => { closeContextMenu(); onCopySelected(); }}>
+              <span>复制所选</span>
+              <span className="log-context-shortcut">Ctrl+C</span>
+            </button>
+          ) : null}
+          <button className="log-context-item" type="button" onClick={() => { closeContextMenu(); onCopyAll(); }}>
+            <span>复制全部</span>
+            <span className="log-context-shortcut">Ctrl+Shift+C</span>
+          </button>
+          <button className="log-context-item danger" type="button" onClick={() => { closeContextMenu(); onClearVisible(); }}>
+            <span>清空</span>
+            <span className="log-context-shortcut">Ctrl+L</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

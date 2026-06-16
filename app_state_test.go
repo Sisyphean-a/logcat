@@ -14,6 +14,11 @@ func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
 	snapshot := appstate.UISnapshot{
 		Model: appstate.Model{
 			SelectedIndex: 0,
+			Selection: appstate.SelectionState{
+				AnchorSourceIndex: 0,
+				FocusSourceIndex:  0,
+				SourceIndexes:     []int{0},
+			},
 			VisibleLogs: []appstate.LogViewItem{{
 				Entry: logcat.LogEntry{
 					TimeText: "06-10 20:41:45.478",

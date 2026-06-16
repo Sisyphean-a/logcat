@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -98,8 +99,27 @@ func (c *Controller) VisibleLogsSnapshot() []LogViewItem {
 	return append([]LogViewItem(nil), c.model.VisibleLogs...)
 }
 
+func (c *Controller) VisibleLogsText() string {
+	return joinLogDisplay(c.VisibleLogsSnapshot())
+}
+
+func (c *Controller) SelectedLogsText() string {
+	return joinLogDisplay(c.SelectedLogs())
+}
+
 func (c *Controller) SetStatus(status string) {
 	c.updateStatus(status)
+}
+
+func joinLogDisplay(logs []LogViewItem) string {
+	if len(logs) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(logs))
+	for _, item := range logs {
+		lines = append(lines, FormatLogDisplay(item.Entry))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (c *Controller) Load(ctx context.Context) error {

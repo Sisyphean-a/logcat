@@ -60,6 +60,7 @@ export namespace main {
 	    display?: string;
 	    isMatch: boolean;
 	    isCurrent: boolean;
+	    isFocused: boolean;
 	    isSelected: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -78,6 +79,7 @@ export namespace main {
 	        this.display = source["display"];
 	        this.isMatch = source["isMatch"];
 	        this.isCurrent = source["isCurrent"];
+	        this.isFocused = source["isFocused"];
 	        this.isSelected = source["isSelected"];
 	    }
 	}
@@ -233,6 +235,7 @@ export namespace main {
 	    search: SearchView;
 	    pause: PauseView;
 	    selectedIndex: number;
+	    selectedCount: number;
 	    logs: LogItemView[];
 	    selectedLog?: SelectedLogView;
 	
@@ -259,6 +262,7 @@ export namespace main {
 	        this.search = this.convertValues(source["search"], SearchView);
 	        this.pause = this.convertValues(source["pause"], PauseView);
 	        this.selectedIndex = source["selectedIndex"];
+	        this.selectedCount = source["selectedCount"];
 	        this.logs = this.convertValues(source["logs"], LogItemView);
 	        this.selectedLog = this.convertValues(source["selectedLog"], SelectedLogView);
 	    }
@@ -284,6 +288,20 @@ export namespace main {
 	
 	
 	
+	export class LogSelectionRequest {
+	    index: number;
+	    mode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LogSelectionRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.mode = source["mode"];
+	    }
+	}
 	
 	
 	

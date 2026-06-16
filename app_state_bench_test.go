@@ -114,7 +114,12 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 				MatchIndexes: matchIndexes,
 				Current:      len(matchIndexes) / 2,
 			},
-			Pause:         appstate.PauseState{Active: false},
+			Pause: appstate.PauseState{Active: false},
+			Selection: appstate.SelectionState{
+				AnchorSourceIndex: total - 1,
+				FocusSourceIndex:  total - 1,
+				SourceIndexes:     []int{total - 1},
+			},
 			SelectedIndex: total - 1,
 		},
 		VisibleCount: total,
@@ -139,6 +144,7 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		VisibleCount:    snapshot.VisibleCount,
 		VisibleStart:    snapshot.VisibleStart,
 		SelectedIndex:   model.SelectedIndex,
+		SelectedCount:   len(model.Selection.SourceIndexes),
 		Filter: FilterView{
 			Draft:           model.Filter.Draft,
 			Applied:         model.Filter.Applied,
@@ -170,6 +176,7 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 	if model.Search.Current >= 0 && model.Search.Current < len(model.Search.MatchIndexes) {
 		currentMatch = model.Search.MatchIndexes[model.Search.Current]
 	}
+	focusedSourceIndex := model.Selection.FocusSourceIndex
 
 	for _, device := range model.Devices {
 		state.Devices = append(state.Devices, DeviceView{
@@ -202,6 +209,13 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 	for offset, item := range model.VisibleLogs {
 		index := snapshot.VisibleStart + offset
 		_, isMatch := matchSet[index]
+		isSelected := false
+		for _, selectedSourceIndex := range model.Selection.SourceIndexes {
+			if selectedSourceIndex == item.SourceIndex {
+				isSelected = true
+				break
+			}
+		}
 		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
 			Index:      index,
@@ -214,10 +228,11 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 			Display:    display,
 			IsMatch:    isMatch,
 			IsCurrent:  currentMatch == index,
-			IsSelected: model.SelectedIndex == index,
+			IsFocused:  item.SourceIndex == focusedSourceIndex,
+			IsSelected: isSelected,
 		}
 		state.Logs = append(state.Logs, row)
-		if row.IsSelected {
+		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
 				Index:    index,
 				TimeText: row.TimeText,

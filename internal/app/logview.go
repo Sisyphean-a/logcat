@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/xiakn/logcat/internal/logcat"
@@ -13,6 +14,14 @@ const defaultPauseBufferCap = 10000
 // defaultMaxLogEntries 是 allLogs 的容量上限。超过后从最旧端淘汰，使运行时
 // 内存有界。按平均一行 ~200B 估算，10 万条约 20~40MB。
 const defaultMaxLogEntries = 100000
+
+type SelectionMode string
+
+const (
+	SelectionModeReplace SelectionMode = "replace"
+	SelectionModeAdd     SelectionMode = "add"
+	SelectionModeRange   SelectionMode = "range"
+)
 
 func (c *Controller) Pause() {
 	c.mu.Lock()
@@ -84,7 +93,7 @@ func (c *Controller) ClearVisible() {
 	c.allLogs.Reset()
 	c.model.TotalLogs = 0
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
-	c.model.SelectedIndex = -1
+	c.clearSelectionLocked()
 	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
 	c.model.Search.Current = -1
 	c.markDirtyLocked()
@@ -111,7 +120,7 @@ func (c *Controller) NextMatch() {
 	} else {
 		c.model.Search.Current = (c.model.Search.Current + 1) % len(c.model.Search.MatchIndexes)
 	}
-	c.model.SelectedIndex = c.model.Search.MatchIndexes[c.model.Search.Current]
+	c.setSingleSelectionLocked(c.model.Search.MatchIndexes[c.model.Search.Current])
 	c.markDirtyLocked()
 }
 
@@ -131,20 +140,22 @@ func (c *Controller) PrevMatch() {
 			c.model.Search.Current = len(c.model.Search.MatchIndexes) - 1
 		}
 	}
-	c.model.SelectedIndex = c.model.Search.MatchIndexes[c.model.Search.Current]
+	c.setSingleSelectionLocked(c.model.Search.MatchIndexes[c.model.Search.Current])
 	c.markDirtyLocked()
 }
 
 func (c *Controller) SelectLog(index int) {
+	c.SelectLogWithMode(index, SelectionModeReplace)
+}
+
+func (c *Controller) SelectLogWithMode(index int, mode SelectionMode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if index < 0 || index >= len(c.model.VisibleLogs) {
 		return
 	}
-
-	c.model.SelectedIndex = index
-	c.syncCurrentMatchToSelectionLocked()
+	c.selectLogLocked(index, mode)
 	c.markDirtyLocked()
 }
 
@@ -157,6 +168,25 @@ func (c *Controller) SelectedLog() (LogViewItem, bool) {
 	}
 
 	return c.model.VisibleLogs[c.model.SelectedIndex], true
+}
+
+func (c *Controller) SelectedLogs() []LogViewItem {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(c.model.Selection.SourceIndexes) == 0 {
+		return nil
+	}
+
+	selected := make([]LogViewItem, 0, len(c.model.Selection.SourceIndexes))
+	for _, sourceIndex := range c.model.Selection.SourceIndexes {
+		index := c.findVisibleIndexBySourceLocked(sourceIndex)
+		if index == -1 {
+			continue
+		}
+		selected = append(selected, c.model.VisibleLogs[index])
+	}
+	return selected
 }
 
 func (c *Controller) pushEntry(entry logcat.LogEntry) {
@@ -213,13 +243,7 @@ func (c *Controller) dropVisibleBeforeLocked(minSource int) {
 	}
 
 	c.model.VisibleLogs = append(c.model.VisibleLogs[:0], c.model.VisibleLogs[drop:]...)
-
-	if c.model.SelectedIndex >= 0 {
-		c.model.SelectedIndex -= drop
-		if c.model.SelectedIndex < 0 {
-			c.model.SelectedIndex = -1
-		}
-	}
+	c.rebuildSelectionFromSourceIndexesLocked()
 	c.recomputeSearchLocked()
 }
 
@@ -239,7 +263,7 @@ func (c *Controller) appendSearchMatchLocked(index int) {
 	}
 
 	c.model.Search.Current = 0
-	c.model.SelectedIndex = 0
+	c.setSingleSelectionLocked(0)
 }
 
 func (c *Controller) recomputeSearchLocked() {
@@ -266,7 +290,7 @@ func (c *Controller) recomputeSearchLocked() {
 	c.syncCurrentMatchToSelectionLocked()
 	if c.model.Search.Current == -1 {
 		c.model.Search.Current = 0
-		c.model.SelectedIndex = c.model.Search.MatchIndexes[0]
+		c.setSingleSelectionLocked(c.model.Search.MatchIndexes[0])
 	}
 }
 
@@ -289,12 +313,14 @@ func FormatLogDisplay(entry logcat.LogEntry) string {
 }
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
-	selectedSourceIndex := c.selectedSourceIndexLocked()
+	selectedSourceIndexes := append([]int(nil), c.model.Selection.SourceIndexes...)
+	focusSourceIndex := c.model.Selection.FocusSourceIndex
+	anchorSourceIndex := c.model.Selection.AnchorSourceIndex
 	searchQuery := c.searchQueryLocked()
 	c.syncSearchCacheLocked(searchQuery)
 	if c.compiledFilter.matchAll() && searchQuery == "" {
 		c.model.VisibleLogs = c.allLogs.AppendOrdered(c.model.VisibleLogs)
-		c.restoreSelectionLocked(selectedSourceIndex)
+		c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 		c.recomputeSearchLocked()
 		c.markDirtyLocked()
 		return
@@ -320,7 +346,7 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
 		})
 	}
-	c.restoreSelectionLocked(selectedSourceIndex)
+	c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 	c.recomputeSearchLocked()
 	c.markDirtyLocked()
 }
@@ -336,28 +362,12 @@ func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchLower strin
 	return searchQuery == "" || strings.Contains(searchLower, searchQuery)
 }
 
-func (c *Controller) restoreSelectionLocked(sourceIndex int) {
-	c.model.SelectedIndex = -1
-	if sourceIndex < 0 {
-		return
-	}
-	for index, item := range c.model.VisibleLogs {
-		if item.SourceIndex == sourceIndex {
-			c.model.SelectedIndex = index
-			return
-		}
-	}
-}
-
 func (c *Controller) searchQueryLocked() string {
 	return normalizedSearchQuery(c.model.Search.Query)
 }
 
 func (c *Controller) selectedSourceIndexLocked() int {
-	if c.model.SelectedIndex < 0 || c.model.SelectedIndex >= len(c.model.VisibleLogs) {
-		return -1
-	}
-	return c.model.VisibleLogs[c.model.SelectedIndex].SourceIndex
+	return c.model.Selection.FocusSourceIndex
 }
 
 func (c *Controller) syncSearchCacheLocked(searchQuery string) {
@@ -372,4 +382,139 @@ func (c *Controller) syncSearchCacheLocked(searchQuery string) {
 
 func (c *Controller) searchCacheActiveLocked() bool {
 	return c.searchQueryLocked() != ""
+}
+
+func (c *Controller) selectLogLocked(index int, mode SelectionMode) {
+	switch mode {
+	case SelectionModeAdd:
+		c.toggleSelectionLocked(index)
+	case SelectionModeRange:
+		c.extendSelectionLocked(index)
+	default:
+		c.setSingleSelectionLocked(index)
+	}
+	c.syncCurrentMatchToSelectionLocked()
+}
+
+func (c *Controller) toggleSelectionLocked(index int) {
+	sourceIndex := c.model.VisibleLogs[index].SourceIndex
+	position := slicesIndex(c.model.Selection.SourceIndexes, sourceIndex)
+	if position >= 0 {
+		c.model.Selection.SourceIndexes = append(
+			c.model.Selection.SourceIndexes[:position],
+			c.model.Selection.SourceIndexes[position+1:]...,
+		)
+		if sourceIndex == c.model.Selection.AnchorSourceIndex {
+			c.model.Selection.AnchorSourceIndex = firstSelectionSource(c.model.Selection.SourceIndexes)
+		}
+		c.model.Selection.FocusSourceIndex = sourceIndex
+		c.rebuildSelectionFromSourceIndexesLocked()
+		return
+	}
+
+	c.model.Selection.SourceIndexes = append(c.model.Selection.SourceIndexes, sourceIndex)
+	sort.Ints(c.model.Selection.SourceIndexes)
+	if c.model.Selection.AnchorSourceIndex < 0 {
+		c.model.Selection.AnchorSourceIndex = sourceIndex
+	}
+	c.model.Selection.FocusSourceIndex = sourceIndex
+	c.model.SelectedIndex = index
+}
+
+func (c *Controller) extendSelectionLocked(index int) {
+	sourceIndex := c.model.VisibleLogs[index].SourceIndex
+	anchorSourceIndex := c.model.Selection.FocusSourceIndex
+	if anchorSourceIndex < 0 {
+		c.setSingleSelectionLocked(index)
+		return
+	}
+
+	anchorIndex := c.findVisibleIndexBySourceLocked(anchorSourceIndex)
+	if anchorIndex == -1 {
+		c.setSingleSelectionLocked(index)
+		return
+	}
+
+	start := anchorIndex
+	end := index
+	if start > end {
+		start, end = end, start
+	}
+	selected := make([]int, 0, end-start+1)
+	for current := start; current <= end; current++ {
+		selected = append(selected, c.model.VisibleLogs[current].SourceIndex)
+	}
+	c.model.Selection.SourceIndexes = selected
+	c.model.Selection.FocusSourceIndex = sourceIndex
+	c.model.SelectedIndex = index
+}
+
+func (c *Controller) setSingleSelectionLocked(index int) {
+	sourceIndex := c.model.VisibleLogs[index].SourceIndex
+	c.model.SelectedIndex = index
+	c.model.Selection.AnchorSourceIndex = sourceIndex
+	c.model.Selection.FocusSourceIndex = sourceIndex
+	c.model.Selection.SourceIndexes = append(c.model.Selection.SourceIndexes[:0], sourceIndex)
+}
+
+func (c *Controller) clearSelectionLocked() {
+	c.model.SelectedIndex = -1
+	c.model.Selection.AnchorSourceIndex = -1
+	c.model.Selection.FocusSourceIndex = -1
+	c.model.Selection.SourceIndexes = c.model.Selection.SourceIndexes[:0]
+}
+
+func (c *Controller) restoreSelectionLocked(selected []int, focus int, anchor int) {
+	c.model.Selection.AnchorSourceIndex = anchor
+	c.model.Selection.FocusSourceIndex = focus
+	c.model.Selection.SourceIndexes = append(c.model.Selection.SourceIndexes[:0], selected...)
+	c.rebuildSelectionFromSourceIndexesLocked()
+}
+
+func (c *Controller) rebuildSelectionFromSourceIndexesLocked() {
+	filtered := c.model.Selection.SourceIndexes[:0]
+	for _, sourceIndex := range c.model.Selection.SourceIndexes {
+		if c.findVisibleIndexBySourceLocked(sourceIndex) == -1 {
+			continue
+		}
+		filtered = append(filtered, sourceIndex)
+	}
+	c.model.Selection.SourceIndexes = filtered
+	if len(filtered) == 0 {
+		c.clearSelectionLocked()
+		return
+	}
+	c.model.SelectedIndex = c.findVisibleIndexBySourceLocked(c.model.Selection.FocusSourceIndex)
+	if c.model.SelectedIndex == -1 {
+		c.model.Selection.FocusSourceIndex = filtered[len(filtered)-1]
+		c.model.SelectedIndex = c.findVisibleIndexBySourceLocked(c.model.Selection.FocusSourceIndex)
+	}
+	if c.findVisibleIndexBySourceLocked(c.model.Selection.AnchorSourceIndex) == -1 {
+		c.model.Selection.AnchorSourceIndex = filtered[0]
+	}
+}
+
+func (c *Controller) findVisibleIndexBySourceLocked(sourceIndex int) int {
+	for index, item := range c.model.VisibleLogs {
+		if item.SourceIndex == sourceIndex {
+			return index
+		}
+	}
+	return -1
+}
+
+func slicesIndex(items []int, target int) int {
+	for index, item := range items {
+		if item == target {
+			return index
+		}
+	}
+	return -1
+}
+
+func firstSelectionSource(items []int) int {
+	if len(items) == 0 {
+		return -1
+	}
+	return items[0]
 }

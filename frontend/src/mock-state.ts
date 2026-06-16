@@ -57,6 +57,7 @@ export function createMockState() {
       droppedCount: 0,
     },
     selectedIndex: -1,
+    selectedCount: 0,
     logs: [
       logRow(0, "16:42:18.479", "I", "chromium", "[H5] 进入申请页面", "views/apply/index.vue:12"),
       logRow(1, "16:42:19.120", "I", "chromium", "[H5] 请求 /api/apply/start", "api/request.ts:44"),
@@ -98,6 +99,7 @@ function logRow(
     display: `${timeText} ${level} ${tag} ${message}`,
     isMatch: false,
     isCurrent: false,
+    isFocused: false,
     isSelected: false,
   };
 }
