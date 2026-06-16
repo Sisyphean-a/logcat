@@ -8,6 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { LogRow, type LogItemView } from "./log-row";
 import { type LogSelectionMode } from "./use-app-controller";
 
@@ -46,6 +47,9 @@ const defaultColumnWidths: Record<ColumnKey, number> = {
   level: 44,
   tag: 136,
 };
+const contextMenuWidth = 208;
+const contextMenuRowHeight = 34;
+const contextMenuPadding = 12;
 
 function clampWindowStart(start: number, size: number, visibleRows: number) {
   const maxStart = Math.max(0, size - visibleRows);
@@ -112,6 +116,13 @@ export function LogTable({
   const end = Math.min(logs.length, start + visibleRows);
   const topSpacer = start * rowHeight;
   const bottomSpacer = Math.max(0, (logs.length - end) * rowHeight);
+  const menuStyle = useMemo(() => {
+    if (!contextMenu || typeof window === "undefined") {
+      return undefined;
+    }
+    const height = contextMenuPadding + (contextMenu.hasSelection ? 3 : 2) * contextMenuRowHeight;
+    return clampContextMenuPosition(contextMenu.x, contextMenu.y, contextMenuWidth, height);
+  }, [contextMenu]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -169,15 +180,11 @@ export function LogTable({
     window.addEventListener("mouseup", handleUp);
   }
 
-  function openContextMenu(event: ReactMouseEvent<HTMLButtonElement>, index: number) {
+  function openContextMenu(event: ReactMouseEvent<HTMLButtonElement>, row: LogItemView) {
     event.preventDefault();
     event.stopPropagation();
-    const row = logs[index];
-    if (!row) {
-      return;
-    }
     if (!row.isSelected) {
-      handleSelect(index, "replace");
+      handleSelect(row.index, "replace");
     }
     setContextMenu({
       x: event.clientX,
@@ -229,11 +236,11 @@ export function LogTable({
         )}
       </div>
 
-      {contextMenu ? (
+      {contextMenu && menuStyle && typeof document !== "undefined" ? createPortal(
         <div
           className="log-context-menu"
           ref={contextMenuRef}
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={menuStyle}
           role="menu"
         >
           {contextMenu.hasSelection ? (
@@ -251,9 +258,17 @@ export function LogTable({
             <span className="log-context-shortcut">Ctrl+L</span>
           </button>
         </div>
-      ) : null}
+      , document.body) : null}
     </div>
   );
+}
+
+function clampContextMenuPosition(x: number, y: number, width: number, height: number): CSSProperties {
+  const gap = 10;
+  return {
+    left: `${Math.max(gap, Math.min(x, window.innerWidth - width - gap))}px`,
+    top: `${Math.max(gap, Math.min(y, window.innerHeight - height - gap))}px`,
+  };
 }
 
 function TableHeadCell({

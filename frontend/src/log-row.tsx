@@ -7,7 +7,7 @@ type LogRowProps = {
   log: LogItemView;
   index: number;
   onSelect: (index: number, mode: LogSelectionMode) => void;
-  onContextMenu: (event: MouseEvent<HTMLButtonElement>, index: number) => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>, log: LogItemView) => void;
   searchQuery: string;
 };
 
@@ -24,7 +24,7 @@ function LogRowComponent({ log, index, onSelect, onContextMenu, searchQuery }: L
         log.isCurrent ? "current" : "",
       ].join(" ")}
       onClick={(event) => onSelect(index, resolveSelectionMode(event))}
-      onContextMenu={(event) => onContextMenu(event, index)}
+      onContextMenu={(event) => onContextMenu(event, log)}
     >
       <span className="time-cell">{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${chipTone(tone)}`}>{log.level}</span>
