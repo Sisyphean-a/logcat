@@ -10,13 +10,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { LogRow, type LogItemView } from "./log-row";
-import { type LogSelectionMode } from "./use-app-controller";
+import { type LogSelectionMode, type ResultSearchPreview } from "./use-app-controller";
 
 type LogTableProps = {
   fontSize: number;
   loading: boolean;
   logs: LogItemView[];
-  searchQuery: string;
+  resultSearch: ResultSearchPreview;
   selectedCount: number;
   visibleCount: number;
   scrollTop: number;
@@ -64,7 +64,7 @@ export function LogTable({
   fontSize,
   loading,
   logs,
-  searchQuery,
+  resultSearch,
   selectedCount,
   visibleCount,
   scrollTop,
@@ -229,7 +229,7 @@ export function LogTable({
                 index={log.index}
                 onSelect={handleSelect}
                 onContextMenu={openContextMenu}
-                searchQuery={searchQuery}
+                resultSearch={resultSearch}
               />
             ))}
           </div>

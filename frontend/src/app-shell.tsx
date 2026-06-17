@@ -207,7 +207,8 @@ function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
             event.preventDefault();
             clearSearch();
           }}
-          placeholder="搜索结果（message / tag）"
+          placeholder="搜索结果：a && b｜a || b｜-c"
+          title="仅搜索当前结果，支持 &&、||、- 语法"
         />
       </div>
       <button

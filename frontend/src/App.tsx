@@ -7,7 +7,7 @@ import { SavedFiltersDialog } from "./saved-filters-dialog";
 import { type SavedFiltersDraft } from "./saved-filter-types";
 import { SettingsDialog } from "./settings-dialog";
 import { Toolbar } from "./toolbar";
-import { useAppController } from "./use-app-controller";
+import { buildResultSearchPreview, useAppController } from "./use-app-controller";
 import { useViewSettings } from "./view-settings";
 
 export default function App() {
@@ -33,6 +33,7 @@ export default function App() {
     handleScroll,
     api,
   } = useAppController();
+  const resultSearch = buildResultSearchPreview(state.search.query);
 
   async function handleSaveFilter(draft: { name: string; packageName: string; query: string }) {
     setSaveDialogBusy(true);
@@ -103,7 +104,7 @@ export default function App() {
             fontSize={settings.tableFontSize}
             loading={loading}
             logs={state.logs}
-            searchQuery={state.search.query}
+            resultSearch={resultSearch}
             selectedCount={state.selectedCount}
             visibleCount={state.visibleCount}
             scrollTop={scrollTop}

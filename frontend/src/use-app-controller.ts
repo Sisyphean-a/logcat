@@ -29,6 +29,10 @@ import { type SavedFiltersDraft } from "./saved-filter-types";
 
 export type AppState = main.AppState;
 export type LogSelectionMode = "replace" | "add" | "range";
+export type ResultSearchPreview = {
+  query: string;
+  highlightTerms: string[];
+};
 
 const stateEventName = "state:updated";
 
@@ -183,6 +187,9 @@ export function useAppController() {
       if (isEditableTarget(event.target)) {
         return;
       }
+      if (hasActiveTextSelection()) {
+        return;
+      }
       const command = event.ctrlKey || event.metaKey;
       if (!command) {
         return;
@@ -289,6 +296,14 @@ function isEditableTarget(target: EventTarget | null) {
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
 }
 
+function hasActiveTextSelection() {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return false;
+  }
+  return selection.toString().length > 0;
+}
+
 const emptyState = new main.AppState({
   status: "loading",
   adbStatus: "未连接",
@@ -332,10 +347,10 @@ function buildPreviewSearchState(
 ) {
   const next = main.AppState.createFrom(state);
   const selectedSourceIndex = currentPreviewSelectionSourceIndex(state);
-  const normalizedQuery = normalizePreviewSearchQuery(query);
-  const visibleLogs = normalizedQuery
-    ? allLogs.filter((item) => matchesPreviewSearch(item, normalizedQuery))
-    : allLogs;
+  const compiledQuery = compilePreviewSearchQuery(query);
+  const visibleLogs = !compiledQuery.active
+    ? allLogs
+    : allLogs.filter((item) => matchesPreviewSearch(item, compiledQuery));
 
   next.search.query = query;
   next.logs = visibleLogs.map((item, index) => main.LogItemView.createFrom({
@@ -346,7 +361,7 @@ function buildPreviewSearchState(
   }));
   next.visibleCount = next.logs.length;
   next.visibleStart = 0;
-  syncPreviewSelection(next, { sourceIndex: selectedSourceIndex, mode: "replace" }, Boolean(normalizedQuery), allLogs);
+  syncPreviewSelection(next, { sourceIndex: selectedSourceIndex, mode: "replace" }, compiledQuery.active, allLogs);
   return next;
 }
 
@@ -433,12 +448,97 @@ function joinPreviewLogs(logs: main.LogItemView[]) {
   return logs.map((item) => formatPreviewLogDisplay(item)).join("\n");
 }
 
+function compilePreviewSearchQuery(query: string) {
+  const normalized = normalizePreviewSearchQuery(query);
+  if (!normalized) {
+    return {
+      active: false,
+      literal: "",
+      groups: [] as Array<Array<{ needle: string; negated: boolean }>>,
+      highlightTerms: [] as string[],
+    };
+  }
+  if (!usesPreviewSearchOperators(normalized)) {
+    return {
+      active: true,
+      literal: normalized,
+      groups: [] as Array<Array<{ needle: string; negated: boolean }>>,
+      highlightTerms: [normalized],
+    };
+  }
+
+  const groups = normalized
+    .split("||")
+    .map((group) => group
+      .split("&&")
+      .map((term) => buildPreviewSearchTerm(term))
+      .filter((term): term is { needle: string; negated: boolean } => term !== null))
+    .filter((group) => group.length > 0);
+
+  if (groups.length === 0) {
+    return {
+      active: true,
+      literal: normalized,
+      groups: [] as Array<Array<{ needle: string; negated: boolean }>>,
+      highlightTerms: [normalized],
+    };
+  }
+
+  const highlightTerms = Array.from(new Set(groups
+    .flatMap((group) => group.filter((term) => !term.negated).map((term) => term.needle))));
+
+  return {
+    active: true,
+    literal: "",
+    groups,
+    highlightTerms,
+  };
+}
+
 function normalizePreviewSearchQuery(query: string) {
   return query.trim().toLowerCase();
 }
 
-function matchesPreviewSearch(log: Pick<PreviewLogRow, "tag" | "message">, query: string) {
-  return `${log.tag}\n${log.message}`.toLowerCase().includes(query);
+function usesPreviewSearchOperators(query: string) {
+  return query.includes("&&") || query.includes("||") || query.startsWith("-");
+}
+
+function buildPreviewSearchTerm(term: string) {
+  let next = term.trim();
+  if (!next) {
+    return null;
+  }
+  let negated = false;
+  while (next.startsWith("-")) {
+    negated = !negated;
+    next = next.slice(1).trim();
+  }
+  if (!next) {
+    return null;
+  }
+  return { needle: next, negated };
+}
+
+function matchesPreviewSearch(
+  log: Pick<PreviewLogRow, "tag" | "message">,
+  query: ReturnType<typeof compilePreviewSearchQuery>,
+) {
+  const text = `${log.tag}\n${log.message}`.toLowerCase();
+  if (query.literal) {
+    return text.includes(query.literal);
+  }
+  return query.groups.some((group) => group.every((term) => {
+    const matched = text.includes(term.needle);
+    return term.negated ? !matched : matched;
+  }));
+}
+
+export function buildResultSearchPreview(query: string): ResultSearchPreview {
+  const compiled = compilePreviewSearchQuery(query);
+  return {
+    query,
+    highlightTerms: compiled.highlightTerms,
+  };
 }
 
 function isWailsRuntime() {

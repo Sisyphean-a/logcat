@@ -1,18 +1,18 @@
 import { memo, type MouseEvent } from "react";
 import { main } from "../wailsjs/go/models";
 import { buildPlainTextTokens, TokenText, chipTone, getLogSemanticTone, timeOnly, tokenizeLogText } from "./log-text";
-import { type LogSelectionMode } from "./use-app-controller";
+import { type LogSelectionMode, type ResultSearchPreview } from "./use-app-controller";
 
 type LogRowProps = {
   log: LogItemView;
   index: number;
   onSelect: (index: number, mode: LogSelectionMode) => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>, log: LogItemView) => void;
-  searchQuery: string;
+  resultSearch: ResultSearchPreview;
 };
 
-function LogRowComponent({ log, index, onSelect, onContextMenu, searchQuery }: LogRowProps) {
-  const isCurrent = searchQuery.trim().length > 0 && log.isFocused;
+function LogRowComponent({ log, index, onSelect, onContextMenu, resultSearch }: LogRowProps) {
+  const isCurrent = resultSearch.query.trim().length > 0 && log.isFocused;
   const tone = getLogSemanticTone(log);
   const messageTokens = tokenizeLogText(log.message);
   return (
@@ -30,10 +30,10 @@ function LogRowComponent({ log, index, onSelect, onContextMenu, searchQuery }: L
       <span className="time-cell">{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${chipTone(tone)}`}>{log.level}</span>
       <span className="tag-cell">
-        <TokenText query={searchQuery} tokens={buildPlainTextTokens(log.tag)} />
+        <TokenText highlightTerms={resultSearch.highlightTerms} tokens={buildPlainTextTokens(log.tag)} />
       </span>
       <span className="message-cell">
-        <TokenText query={searchQuery} tokens={messageTokens} />
+        <TokenText highlightTerms={resultSearch.highlightTerms} tokens={messageTokens} />
       </span>
     </button>
   );
@@ -44,7 +44,7 @@ function areEqual(prev: LogRowProps, next: LogRowProps) {
     prev.index === next.index &&
     prev.onSelect === next.onSelect &&
     prev.onContextMenu === next.onContextMenu &&
-    prev.searchQuery === next.searchQuery &&
+    prev.resultSearch.query === next.resultSearch.query &&
     prev.log.sourceIndex === next.log.sourceIndex &&
     prev.log.message === next.log.message &&
     prev.log.tag === next.log.tag &&

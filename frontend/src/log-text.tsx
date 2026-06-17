@@ -31,8 +31,8 @@ const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
   { kind: "path", regex: /(?:\/[\w./?&=#-]+)+/g },
 ];
 
-export function TokenText({ query = "", tokens }: { query?: string; tokens: LogTextToken[] }) {
-  const ranges = buildHighlightRanges(tokens, query);
+export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: string[]; tokens: LogTextToken[] }) {
+  const ranges = buildHighlightRanges(tokens, highlightTerms);
   return tokens.map((token, index) => (
     <Fragment key={`${index}-${token.kind}-${token.start}-${token.end}`}>
       {splitTokenByRanges(token, ranges).map((piece, pieceIndex) => (
@@ -139,26 +139,28 @@ function findNextToken(text: string, cursor: number) {
   return best;
 }
 
-function buildHighlightRanges(tokens: LogTextToken[], query: string) {
-  const normalizedQuery = normalizeQuery(query);
-  if (!normalizedQuery) {
+function buildHighlightRanges(tokens: LogTextToken[], queries: string[]) {
+  const normalizedQueries = normalizeQueries(queries);
+  if (normalizedQueries.length === 0) {
     return [];
   }
 
   const text = tokens.map((token) => token.text).join("");
   const normalizedText = text.toLowerCase();
   const ranges: HighlightRange[] = [];
-  let cursor = 0;
 
-  while (cursor < normalizedText.length) {
-    const index = normalizedText.indexOf(normalizedQuery, cursor);
-    if (index === -1) {
-      break;
+  for (const query of normalizedQueries) {
+    let cursor = 0;
+    while (cursor < normalizedText.length) {
+      const index = normalizedText.indexOf(query, cursor);
+      if (index === -1) {
+        break;
+      }
+      ranges.push({ start: index, end: index + query.length });
+      cursor = index + query.length;
     }
-    ranges.push({ start: index, end: index + normalizedQuery.length });
-    cursor = index + normalizedQuery.length;
   }
-  return ranges;
+  return mergeHighlightRanges(ranges);
 }
 
 function splitTokenByRanges(token: LogTextToken, ranges: HighlightRange[]) {
@@ -201,6 +203,26 @@ function buildTokenClassName(kind: LogTokenKind, highlight: boolean) {
   return className || undefined;
 }
 
-function normalizeQuery(query: string) {
-  return query.trim().toLowerCase();
+function normalizeQueries(queries: string[]) {
+  return queries
+    .map((query) => query.trim().toLowerCase())
+    .filter((query) => query.length > 0);
+}
+
+function mergeHighlightRanges(ranges: HighlightRange[]) {
+  if (ranges.length <= 1) {
+    return ranges;
+  }
+  const sorted = [...ranges].sort((left, right) => left.start - right.start || left.end - right.end);
+  const merged: HighlightRange[] = [sorted[0]];
+  for (let index = 1; index < sorted.length; index++) {
+    const current = sorted[index];
+    const last = merged[merged.length - 1];
+    if (current.start > last.end) {
+      merged.push(current);
+      continue;
+    }
+    last.end = Math.max(last.end, current.end);
+  }
+  return merged;
 }

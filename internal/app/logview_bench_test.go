@@ -28,7 +28,8 @@ func BenchmarkRebuildVisibleWithSearch(b *testing.B) {
 	}
 	controller.model.TotalLogs = controller.allLogs.Len()
 	controller.model.Search.Query = "token"
-	controller.syncSearchCacheLocked("token")
+	controller.compiledSearch = compileSearchQuery("token")
+	controller.syncSearchCacheLocked(true)
 
 	b.ReportAllocs()
 	b.ResetTimer()

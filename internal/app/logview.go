@@ -104,6 +104,7 @@ func (c *Controller) SetSearchQuery(query string) {
 	defer c.mu.Unlock()
 
 	c.model.Search.Query = query
+	c.compiledSearch = compileSearchQuery(query)
 	c.rebuildVisibleFromAllLogsLocked()
 }
 
@@ -205,9 +206,8 @@ func (c *Controller) pushEntry(entry logcat.LogEntry) {
 		return
 	}
 
-	searchQuery := c.searchQueryLocked()
 	item, searchLower := c.appendLogLocked(entry)
-	if c.matchesVisibleLogLocked(item, searchLower, searchQuery) {
+	if c.matchesVisibleLogLocked(item, searchLower) {
 		c.appendVisibleLogLocked(item)
 	}
 	c.markDirtyLocked()
@@ -254,7 +254,7 @@ func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
 }
 
 func (c *Controller) appendSearchMatchLocked(index int) {
-	if c.searchQueryLocked() == "" {
+	if c.compiledSearch.matchAll() {
 		return
 	}
 	c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
@@ -267,7 +267,7 @@ func (c *Controller) appendSearchMatchLocked(index int) {
 }
 
 func (c *Controller) recomputeSearchLocked() {
-	if c.searchQueryLocked() == "" {
+	if c.compiledSearch.matchAll() {
 		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
 		c.model.Search.Current = -1
 		return
@@ -316,9 +316,9 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	selectedSourceIndexes := append([]int(nil), c.model.Selection.SourceIndexes...)
 	focusSourceIndex := c.model.Selection.FocusSourceIndex
 	anchorSourceIndex := c.model.Selection.AnchorSourceIndex
-	searchQuery := c.searchQueryLocked()
-	c.syncSearchCacheLocked(searchQuery)
-	if c.compiledFilter.matchAll() && searchQuery == "" {
+	searchActive := !c.compiledSearch.matchAll()
+	c.syncSearchCacheLocked(searchActive)
+	if c.compiledFilter.matchAll() && !searchActive {
 		c.model.VisibleLogs = c.allLogs.AppendOrdered(c.model.VisibleLogs)
 		c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 		c.recomputeSearchLocked()
@@ -331,16 +331,16 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	} else {
 		c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	}
-	if searchQuery == "" {
+	if !searchActive {
 		c.allLogs.Range(func(item LogViewItem) {
-			if !c.matchesVisibleLogLocked(item, "", searchQuery) {
+			if !c.matchesVisibleLogLocked(item, "") {
 				return
 			}
 			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
 		})
 	} else {
 		c.allLogs.RangeWithSearchLower(func(item LogViewItem, searchLower string) {
-			if !c.matchesVisibleLogLocked(item, searchLower, searchQuery) {
+			if !c.matchesVisibleLogLocked(item, searchLower) {
 				return
 			}
 			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
@@ -355,23 +355,19 @@ func normalizedSearchQuery(query string) string {
 	return strings.ToLower(strings.TrimSpace(query))
 }
 
-func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchLower string, searchQuery string) bool {
+func (c *Controller) matchesVisibleLogLocked(item LogViewItem, searchLower string) bool {
 	if !c.compiledFilter.matchAll() && !c.matchesAppliedFilterLocked(item.Entry) {
 		return false
 	}
-	return searchQuery == "" || strings.Contains(searchLower, searchQuery)
-}
-
-func (c *Controller) searchQueryLocked() string {
-	return normalizedSearchQuery(c.model.Search.Query)
+	return c.compiledSearch.matchAll() || c.compiledSearch.matches(searchLower)
 }
 
 func (c *Controller) selectedSourceIndexLocked() int {
 	return c.model.Selection.FocusSourceIndex
 }
 
-func (c *Controller) syncSearchCacheLocked(searchQuery string) {
-	if searchQuery == "" {
+func (c *Controller) syncSearchCacheLocked(searchActive bool) {
+	if !searchActive {
 		c.allLogs.ReleaseSearchCache()
 		return
 	}
@@ -381,7 +377,7 @@ func (c *Controller) syncSearchCacheLocked(searchQuery string) {
 }
 
 func (c *Controller) searchCacheActiveLocked() bool {
-	return c.searchQueryLocked() != ""
+	return !c.compiledSearch.matchAll()
 }
 
 func (c *Controller) selectLogLocked(index int, mode SelectionMode) {

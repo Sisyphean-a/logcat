@@ -49,6 +49,7 @@ type Controller struct {
 	resumeBinding        SessionBinding
 	resumeStreaming      bool
 	compiledFilter       compiledFilterQuery
+	compiledSearch       compiledSearchQuery
 }
 
 const defaultBindingPollInterval = 500 * time.Millisecond
@@ -75,6 +76,7 @@ func NewController(deviceService DeviceService, sessionStart SessionStarter) *Co
 		resumeBinding:        SessionBinding{},
 		resumeStreaming:      false,
 		compiledFilter:       compiled,
+		compiledSearch:       compiledSearchQuery{},
 	}
 }
 
