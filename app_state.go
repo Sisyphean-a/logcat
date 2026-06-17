@@ -61,9 +61,7 @@ type SavedFilterView struct {
 }
 
 type SearchView struct {
-	Query        string `json:"query"`
-	MatchIndexes []int  `json:"matchIndexes"`
-	Current      int    `json:"current"`
+	Query string `json:"query"`
 }
 
 type PauseView struct {
@@ -73,22 +71,17 @@ type PauseView struct {
 }
 
 type LogItemView struct {
-	Index      int    `json:"index"`
-	TimeText   string `json:"timeText"`
-	Level      string `json:"level"`
-	Tag        string `json:"tag"`
-	Message    string `json:"message"`
-	Source     string `json:"source"`
-	Raw        string `json:"raw"`
-	Display    string `json:"display,omitempty"`
-	IsMatch    bool   `json:"isMatch"`
-	IsCurrent  bool   `json:"isCurrent"`
-	IsFocused  bool   `json:"isFocused"`
-	IsSelected bool   `json:"isSelected"`
+	Index       int    `json:"index"`
+	SourceIndex int    `json:"sourceIndex"`
+	TimeText    string `json:"timeText"`
+	Level       string `json:"level"`
+	Tag         string `json:"tag"`
+	Message     string `json:"message"`
+	IsFocused   bool   `json:"isFocused"`
+	IsSelected  bool   `json:"isSelected"`
 }
 
 type SelectedLogView struct {
-	Index    int    `json:"index"`
 	TimeText string `json:"timeText"`
 	Level    string `json:"level"`
 	Tag      string `json:"tag"`
@@ -100,7 +93,6 @@ type SelectedLogView struct {
 
 func newAppState(snapshot appstate.UISnapshot) AppState {
 	model := snapshot.Model
-	matchIndexes := model.Search.MatchIndexes
 	state := AppState{
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
@@ -127,9 +119,7 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			History:         model.Filter.History,
 		},
 		Search: SearchView{
-			Query:        model.Search.Query,
-			MatchIndexes: matchIndexes,
-			Current:      model.Search.Current,
+			Query: model.Search.Query,
 		},
 		Pause: PauseView{
 			Active:        model.Pause.Active,
@@ -139,20 +129,11 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		Logs: make([]LogItemView, len(model.VisibleLogs)),
 	}
 
-	currentMatch := -1
-	if model.Search.Current >= 0 && model.Search.Current < len(matchIndexes) {
-		currentMatch = matchIndexes[model.Search.Current]
-	}
 	focusedSourceIndex := model.Selection.FocusSourceIndex
 	selectedPos := 0
 	nextSelectedSource := -1
 	if len(model.Selection.SourceIndexes) > 0 {
 		nextSelectedSource = model.Selection.SourceIndexes[0]
-	}
-	nextMatchPos := 0
-	nextMatch := -1
-	if len(matchIndexes) > 0 {
-		nextMatch = matchIndexes[0]
 	}
 
 	for index, device := range model.Devices {
@@ -185,15 +166,6 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 
 	for offset, item := range model.VisibleLogs {
 		index := snapshot.VisibleStart + offset
-		isMatch := index == nextMatch
-		if isMatch {
-			nextMatchPos++
-			if nextMatchPos < len(matchIndexes) {
-				nextMatch = matchIndexes[nextMatchPos]
-			} else {
-				nextMatch = -1
-			}
-		}
 		isSelected := item.SourceIndex == nextSelectedSource
 		if isSelected {
 			selectedPos++
@@ -203,31 +175,26 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 				nextSelectedSource = -1
 			}
 		}
-		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
-			Index:      index,
-			TimeText:   item.Entry.TimeText,
-			Level:      item.Entry.Level,
-			Tag:        item.Entry.Tag,
-			Message:    item.Entry.Message,
-			Source:     item.Entry.Source,
-			Raw:        item.Entry.Raw,
-			IsMatch:    isMatch,
-			IsCurrent:  currentMatch == index,
-			IsFocused:  item.SourceIndex == focusedSourceIndex,
-			IsSelected: isSelected,
+			Index:       index,
+			SourceIndex: item.SourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+			IsFocused:   item.SourceIndex == focusedSourceIndex,
+			IsSelected:  isSelected,
 		}
 		state.Logs[offset] = row
 		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
-				Index:    index,
 				TimeText: row.TimeText,
 				Level:    row.Level,
 				Tag:      row.Tag,
 				Message:  row.Message,
 				Source:   item.Entry.Source,
 				Raw:      item.Entry.Raw,
-				Display:  display,
+				Display:  appstate.FormatLogDisplay(item.Entry),
 			}
 		}
 	}

@@ -10,7 +10,6 @@ func cloneModel(model Model) Model {
 	cloned.BoundPIDs = append([]int(nil), model.BoundPIDs...)
 	cloned.VisibleLogs = append([]LogViewItem(nil), model.VisibleLogs...)
 	cloned.Filter = cloneFilterState(model.Filter)
-	cloned.Search.MatchIndexes = append([]int(nil), model.Search.MatchIndexes...)
 	cloned.Selection.SourceIndexes = append([]int(nil), model.Selection.SourceIndexes...)
 	return cloned
 }

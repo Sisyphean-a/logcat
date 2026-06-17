@@ -12,6 +12,7 @@ type LogRowProps = {
 };
 
 function LogRowComponent({ log, index, onSelect, onContextMenu, searchQuery }: LogRowProps) {
+  const isCurrent = searchQuery.trim().length > 0 && log.isFocused;
   const tone = getLogSemanticTone(log);
   const messageTokens = tokenizeLogText(log.message);
   return (
@@ -21,7 +22,7 @@ function LogRowComponent({ log, index, onSelect, onContextMenu, searchQuery }: L
         `tone-${tone}`,
         log.isSelected ? "selected" : "",
         log.isFocused ? "focused" : "",
-        log.isCurrent ? "current" : "",
+        isCurrent ? "current" : "",
       ].join(" ")}
       onClick={(event) => onSelect(index, resolveSelectionMode(event))}
       onContextMenu={(event) => onContextMenu(event, log)}
@@ -44,14 +45,13 @@ function areEqual(prev: LogRowProps, next: LogRowProps) {
     prev.onSelect === next.onSelect &&
     prev.onContextMenu === next.onContextMenu &&
     prev.searchQuery === next.searchQuery &&
-    prev.log.raw === next.log.raw &&
+    prev.log.sourceIndex === next.log.sourceIndex &&
     prev.log.message === next.log.message &&
     prev.log.tag === next.log.tag &&
     prev.log.level === next.log.level &&
     prev.log.timeText === next.log.timeText &&
     prev.log.isFocused === next.log.isFocused &&
-    prev.log.isSelected === next.log.isSelected &&
-    prev.log.isCurrent === next.log.isCurrent
+    prev.log.isSelected === next.log.isSelected
   );
 }
 

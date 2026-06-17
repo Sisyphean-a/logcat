@@ -36,8 +36,8 @@ func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
 	if len(state.Logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(state.Logs))
 	}
-	if state.Logs[0].Raw != raw {
-		t.Fatal("expected row raw to stay unchanged")
+	if state.Logs[0].SourceIndex != 0 {
+		t.Fatalf("expected row sourceIndex 0, got %d", state.Logs[0].SourceIndex)
 	}
 	if state.SelectedLog == nil {
 		t.Fatal("expected selected log")

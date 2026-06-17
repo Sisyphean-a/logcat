@@ -224,7 +224,7 @@ export function LogTable({
           <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
             {logs.slice(start, end).map((log) => (
               <LogRow
-                key={`${log.index}-${log.raw}`}
+                key={log.sourceIndex}
                 log={log}
                 index={log.index}
                 onSelect={handleSelect}

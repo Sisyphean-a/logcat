@@ -1,10 +1,6 @@
 package app
 
-import (
-	"sort"
-
-	"github.com/xiakn/logcat/internal/adb"
-)
+import "github.com/xiakn/logcat/internal/adb"
 
 type UISnapshot struct {
 	Model        Model
@@ -32,12 +28,8 @@ func cloneUISnapshotModel(model Model, limit int) Model {
 	cloned.Processes = append([]adb.ProcessInfo(nil), model.Processes...)
 	cloned.BoundPIDs = append([]int(nil), model.BoundPIDs...)
 	cloned.Filter = cloneFilterState(model.Filter)
+	cloned.Search = SearchState{Query: model.Search.Query}
 	cloned.VisibleLogs = append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...)
-	cloned.Search.MatchIndexes, cloned.Search.Current = sliceSearchWindow(
-		model.Search.MatchIndexes,
-		model.Search.Current,
-		visibleWindowStart(len(model.VisibleLogs), limit),
-	)
 	return cloned
 }
 
@@ -51,13 +43,4 @@ func visibleWindowStart(size int, limit int) int {
 		return 0
 	}
 	return size - limit
-}
-
-func sliceSearchWindow(matchIndexes []int, current int, start int) ([]int, int) {
-	startPos := sort.SearchInts(matchIndexes, start)
-	windowMatches := append([]int(nil), matchIndexes[startPos:]...)
-	if current < startPos || current >= len(matchIndexes) {
-		return windowMatches, -1
-	}
-	return windowMatches, current - startPos
 }

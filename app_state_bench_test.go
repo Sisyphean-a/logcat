@@ -65,7 +65,6 @@ func BenchmarkMarshalAppState(b *testing.B) {
 func benchmarkUISnapshot() appstate.UISnapshot {
 	const total = 1000
 	logs := make([]appstate.LogViewItem, total)
-	matchIndexes := make([]int, 0, total/4)
 	for i := range logs {
 		logs[i] = appstate.LogViewItem{
 			SourceIndex: i,
@@ -77,9 +76,6 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 				Raw:      fmt.Sprintf("raw line %d", i),
 				Source:   "H5",
 			},
-		}
-		if i%4 == 0 {
-			matchIndexes = append(matchIndexes, i)
 		}
 	}
 
@@ -110,9 +106,7 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 				History: []string{"tag=chromium", `message~:"token"`},
 			},
 			Search: appstate.SearchState{
-				Query:        "token",
-				MatchIndexes: matchIndexes,
-				Current:      len(matchIndexes) / 2,
+				Query: "token",
 			},
 			Pause: appstate.PauseState{Active: false},
 			Selection: appstate.SelectionState{
@@ -155,9 +149,7 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 			History:         append([]string(nil), model.Filter.History...),
 		},
 		Search: SearchView{
-			Query:        model.Search.Query,
-			MatchIndexes: append([]int(nil), model.Search.MatchIndexes...),
-			Current:      model.Search.Current,
+			Query: model.Search.Query,
 		},
 		Pause: PauseView{
 			Active:        model.Pause.Active,
@@ -167,15 +159,6 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		Logs: make([]LogItemView, 0, len(model.VisibleLogs)),
 	}
 
-	matchSet := make(map[int]struct{}, len(model.Search.MatchIndexes))
-	for _, index := range model.Search.MatchIndexes {
-		matchSet[index] = struct{}{}
-	}
-
-	currentMatch := -1
-	if model.Search.Current >= 0 && model.Search.Current < len(model.Search.MatchIndexes) {
-		currentMatch = model.Search.MatchIndexes[model.Search.Current]
-	}
 	focusedSourceIndex := model.Selection.FocusSourceIndex
 
 	for _, device := range model.Devices {
@@ -208,7 +191,6 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 
 	for offset, item := range model.VisibleLogs {
 		index := snapshot.VisibleStart + offset
-		_, isMatch := matchSet[index]
 		isSelected := false
 		for _, selectedSourceIndex := range model.Selection.SourceIndexes {
 			if selectedSourceIndex == item.SourceIndex {
@@ -218,30 +200,25 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		}
 		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
-			Index:      index,
-			TimeText:   item.Entry.TimeText,
-			Level:      item.Entry.Level,
-			Tag:        item.Entry.Tag,
-			Message:    item.Entry.Message,
-			Source:     item.Entry.Source,
-			Raw:        item.Entry.Raw,
-			Display:    display,
-			IsMatch:    isMatch,
-			IsCurrent:  currentMatch == index,
-			IsFocused:  item.SourceIndex == focusedSourceIndex,
-			IsSelected: isSelected,
+			Index:       index,
+			SourceIndex: item.SourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+			IsFocused:   item.SourceIndex == focusedSourceIndex,
+			IsSelected:  isSelected,
 		}
 		state.Logs = append(state.Logs, row)
 		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
-				Index:    index,
 				TimeText: row.TimeText,
 				Level:    row.Level,
 				Tag:      row.Tag,
 				Message:  row.Message,
-				Source:   row.Source,
-				Raw:      row.Raw,
-				Display:  row.Display,
+				Source:   item.Entry.Source,
+				Raw:      item.Entry.Raw,
+				Display:  display,
 			}
 		}
 	}

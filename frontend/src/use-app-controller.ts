@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 import { app, main } from "../wailsjs/go/models";
-import { createMockState } from "./mock-state";
+import { createMockPreviewLogs, createMockState, type PreviewLogRow } from "./mock-state";
 import {
   ApplyFilterDraft,
   ApplySavedFilter,
@@ -43,7 +43,7 @@ export function useAppController() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const autoFollowRef = useRef(autoFollow);
   const ignoreScrollRef = useRef(false);
-  const previewAllLogsRef = useRef<main.LogItemView[]>([]);
+  const previewAllLogsRef = useRef<PreviewLogRow[]>([]);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -59,7 +59,7 @@ export function useAppController() {
   useEffect(() => {
     if (!isWailsRuntime()) {
       const snapshot = createMockState();
-      previewAllLogsRef.current = snapshot.logs.map((item) => main.LogItemView.createFrom(item));
+      previewAllLogsRef.current = createMockPreviewLogs();
       setState(snapshot);
       setLoading(false);
       return;
@@ -314,8 +314,6 @@ const emptyState = new main.AppState({
   },
   search: {
     query: "",
-    matchIndexes: [],
-    current: -1,
   },
   pause: {
     active: false,
@@ -329,11 +327,11 @@ const emptyState = new main.AppState({
 
 function buildPreviewSearchState(
   state: AppState,
-  allLogs: main.LogItemView[],
+  allLogs: PreviewLogRow[],
   query: string,
 ) {
   const next = main.AppState.createFrom(state);
-  const selectedRaw = currentPreviewSelectionRaw(state);
+  const selectedSourceIndex = currentPreviewSelectionSourceIndex(state);
   const normalizedQuery = normalizePreviewSearchQuery(query);
   const visibleLogs = normalizedQuery
     ? allLogs.filter((item) => matchesPreviewSearch(item, normalizedQuery))
@@ -343,43 +341,40 @@ function buildPreviewSearchState(
   next.logs = visibleLogs.map((item, index) => main.LogItemView.createFrom({
     ...item,
     index,
-    isMatch: false,
-    isCurrent: false,
     isFocused: false,
     isSelected: false,
   }));
   next.visibleCount = next.logs.length;
   next.visibleStart = 0;
-  syncPreviewSelection(next, { raw: selectedRaw, mode: "replace" }, Boolean(normalizedQuery));
+  syncPreviewSelection(next, { sourceIndex: selectedSourceIndex, mode: "replace" }, Boolean(normalizedQuery), allLogs);
   return next;
 }
 
 function syncPreviewSelection(
   state: AppState,
-  request: { raw: string; mode: LogSelectionMode },
+  request: { sourceIndex: number; mode: LogSelectionMode },
   preferFirstResult: boolean,
+  allLogs: PreviewLogRow[],
 ) {
-  const hasSearch = normalizePreviewSearchQuery(state.search.query).length > 0;
-  state.search.matchIndexes = hasSearch ? state.logs.map((item) => item.index) : [];
-  const targetIndex = request.raw
-    ? state.logs.findIndex((item) => item.raw === request.raw)
+  const targetIndex = request.sourceIndex >= 0
+    ? state.logs.findIndex((item) => item.sourceIndex === request.sourceIndex)
     : -1;
   const fallbackIndex = preferFirstResult && state.logs.length > 0 ? 0 : -1;
   const nextFocusedIndex = targetIndex >= 0 ? targetIndex : fallbackIndex;
   const previousFocusedIndex = state.logs.findIndex((item) => item.isFocused);
   const previousAnchorIndex = state.logs.findIndex((item) => item.isSelected);
   const selected = new Set(
-    state.logs.filter((item) => item.isSelected).map((item) => item.raw),
+    state.logs.filter((item) => item.isSelected).map((item) => item.sourceIndex),
   );
 
   if (nextFocusedIndex >= 0) {
-    const focusedRaw = state.logs[nextFocusedIndex].raw;
+    const focusedSourceIndex = state.logs[nextFocusedIndex].sourceIndex;
     switch (request.mode) {
       case "add":
-        if (selected.has(focusedRaw)) {
-          selected.delete(focusedRaw);
+        if (selected.has(focusedSourceIndex)) {
+          selected.delete(focusedSourceIndex);
         } else {
-          selected.add(focusedRaw);
+          selected.add(focusedSourceIndex);
         }
         break;
       case "range": {
@@ -388,13 +383,13 @@ function syncPreviewSelection(
         const end = anchor >= 0 ? Math.max(anchor, nextFocusedIndex) : nextFocusedIndex;
         selected.clear();
         for (let index = start; index <= end; index++) {
-          selected.add(state.logs[index].raw);
+          selected.add(state.logs[index].sourceIndex);
         }
         break;
       }
       default:
         selected.clear();
-        selected.add(focusedRaw);
+        selected.add(focusedSourceIndex);
     }
   } else {
     selected.clear();
@@ -402,30 +397,27 @@ function syncPreviewSelection(
 
   state.selectedIndex = nextFocusedIndex;
   state.selectedCount = selected.size;
-  state.search.current = hasSearch && nextFocusedIndex >= 0 ? nextFocusedIndex : -1;
   state.logs = state.logs.map((item, index) => {
-    item.isSelected = selected.has(item.raw);
+    item.isSelected = selected.has(item.sourceIndex);
     item.isFocused = index === nextFocusedIndex;
-    item.isCurrent = hasSearch && index === state.search.current;
-    item.isMatch = false;
     return item;
   });
-  state.selectedLog = buildPreviewSelectedLog(state.logs[nextFocusedIndex]);
+  state.selectedLog = buildPreviewSelectedLog(state.logs[nextFocusedIndex], allLogs);
 }
 
-function buildPreviewSelectedLog(log?: main.LogItemView) {
+function buildPreviewSelectedLog(log?: main.LogItemView, allLogs: PreviewLogRow[] = []) {
   if (!log) {
     return undefined;
   }
+  const source = allLogs.find((item) => item.sourceIndex === log.sourceIndex)?.source ?? "";
   return {
-    index: log.index,
     timeText: log.timeText,
     level: log.level,
     tag: log.tag,
     message: log.message,
-    source: log.source,
-    raw: log.raw,
-    display: log.display ?? formatPreviewLogDisplay(log),
+    source,
+    raw: formatPreviewLogDisplay(log),
+    display: formatPreviewLogDisplay(log),
   };
 }
 
@@ -433,22 +425,19 @@ function formatPreviewLogDisplay(log: Pick<main.LogItemView, "timeText" | "level
   return `${log.timeText} ${log.level} ${log.tag} ${log.message}`;
 }
 
-function currentPreviewSelectionRaw(state: AppState) {
-  if (state.selectedLog?.raw) {
-    return state.selectedLog.raw;
-  }
-  return state.selectedIndex >= 0 ? state.logs[state.selectedIndex]?.raw || "" : "";
+function currentPreviewSelectionSourceIndex(state: AppState) {
+  return state.selectedIndex >= 0 ? state.logs[state.selectedIndex]?.sourceIndex ?? -1 : -1;
 }
 
 function joinPreviewLogs(logs: main.LogItemView[]) {
-  return logs.map((item) => item.display ?? formatPreviewLogDisplay(item)).join("\n");
+  return logs.map((item) => formatPreviewLogDisplay(item)).join("\n");
 }
 
 function normalizePreviewSearchQuery(query: string) {
   return query.trim().toLowerCase();
 }
 
-function matchesPreviewSearch(log: main.LogItemView, query: string) {
+function matchesPreviewSearch(log: Pick<PreviewLogRow, "tag" | "message">, query: string) {
   return `${log.tag}\n${log.message}`.toLowerCase().includes(query);
 }
 
@@ -461,7 +450,7 @@ function createPreviewApi(
   state: AppState,
   setState: (state: AppState) => void,
   setError: (value: string) => void,
-  allLogsRef: MutableRefObject<main.LogItemView[]>,
+  allLogsRef: MutableRefObject<PreviewLogRow[]>,
 ) {
   return {
     selectDevice: async (_deviceID: string) => undefined,
@@ -515,12 +504,22 @@ function createPreviewApi(
     },
     selectLog: async (index: number) => {
       const next = main.AppState.createFrom(state);
-      syncPreviewSelection(next, { raw: index >= 0 ? next.logs[index]?.raw || "" : "", mode: "replace" }, false);
+      syncPreviewSelection(
+        next,
+        { sourceIndex: index >= 0 ? next.logs[index]?.sourceIndex ?? -1 : -1, mode: "replace" },
+        false,
+        allLogsRef.current,
+      );
       setState(next);
     },
     selectLogs: async (index: number, mode: LogSelectionMode) => {
       const next = main.AppState.createFrom(state);
-      syncPreviewSelection(next, { raw: index >= 0 ? next.logs[index]?.raw || "" : "", mode }, false);
+      syncPreviewSelection(
+        next,
+        { sourceIndex: index >= 0 ? next.logs[index]?.sourceIndex ?? -1 : -1, mode },
+        false,
+        allLogsRef.current,
+      );
       setState(next);
     },
     pauseToggle: async () => {

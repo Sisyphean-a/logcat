@@ -24,7 +24,6 @@ export namespace app {
 export namespace main {
 	
 	export class SelectedLogView {
-	    index: number;
 	    timeText: string;
 	    level: string;
 	    tag: string;
@@ -39,7 +38,6 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.index = source["index"];
 	        this.timeText = source["timeText"];
 	        this.level = source["level"];
 	        this.tag = source["tag"];
@@ -51,15 +49,11 @@ export namespace main {
 	}
 	export class LogItemView {
 	    index: number;
+	    sourceIndex: number;
 	    timeText: string;
 	    level: string;
 	    tag: string;
 	    message: string;
-	    source: string;
-	    raw: string;
-	    display?: string;
-	    isMatch: boolean;
-	    isCurrent: boolean;
 	    isFocused: boolean;
 	    isSelected: boolean;
 	
@@ -70,15 +64,11 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.index = source["index"];
+	        this.sourceIndex = source["sourceIndex"];
 	        this.timeText = source["timeText"];
 	        this.level = source["level"];
 	        this.tag = source["tag"];
 	        this.message = source["message"];
-	        this.source = source["source"];
-	        this.raw = source["raw"];
-	        this.display = source["display"];
-	        this.isMatch = source["isMatch"];
-	        this.isCurrent = source["isCurrent"];
 	        this.isFocused = source["isFocused"];
 	        this.isSelected = source["isSelected"];
 	    }
@@ -101,8 +91,6 @@ export namespace main {
 	}
 	export class SearchView {
 	    query: string;
-	    matchIndexes: number[];
-	    current: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SearchView(source);
@@ -111,8 +99,6 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.query = source["query"];
-	        this.matchIndexes = source["matchIndexes"];
-	        this.current = source["current"];
 	    }
 	}
 	export class SavedFilterView {
