@@ -57,8 +57,7 @@ func (c *Controller) SelectSavedFilter(id string) error {
 
 func (c *Controller) ApplySavedFilter(ctx context.Context, id string) error {
 	if id == "" {
-		c.clearSavedFilterSelection()
-		return nil
+		return c.clearSavedFilterSelection(ctx)
 	}
 
 	c.mu.RLock()

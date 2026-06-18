@@ -50,13 +50,44 @@ func (c *Controller) clearPackageSelection(ctx context.Context) error {
 	return nil
 }
 
-func (c *Controller) clearSavedFilterSelection() {
+func (c *Controller) clearSavedFilterSelection(ctx context.Context) error {
+	deviceID, shouldRebind := c.savedFilterClearTarget()
+	if shouldRebind {
+		c.mu.Lock()
+		c.model.Filter.ActiveFilterID = ""
+		c.model.Filter.Error = ""
+		c.markDirtyLocked()
+		c.mu.Unlock()
+
+		if err := c.SelectDevice(ctx, deviceID); err != nil {
+			return err
+		}
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.model.Filter.ActiveFilterID = ""
+	c.model.Filter.Draft = ""
+	c.setAppliedFilterLocked("")
 	c.model.Filter.Error = ""
-	c.markDirtyLocked()
+	c.model.SelectedPackage = ""
+	c.model.Processes = c.model.Processes[:0]
+	c.model.SelectedProcess = ""
+	c.model.BoundPIDs = c.model.BoundPIDs[:0]
+	c.rebuildVisibleFromAllLogsLocked()
+	return nil
+}
+
+func (c *Controller) savedFilterClearTarget() (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	deviceID := c.binding.DeviceID
+	if deviceID == "" {
+		deviceID = c.model.SelectedDevice
+	}
+	return deviceID, c.model.SelectedPackage != "" && deviceID != ""
 }
 
 func (c *Controller) selectedOrBoundDeviceID() string {

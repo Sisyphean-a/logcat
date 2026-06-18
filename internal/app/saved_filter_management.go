@@ -48,8 +48,7 @@ func (c *Controller) ReplaceSavedFilterDefinitions(
 	c.mu.Unlock()
 
 	if nextActiveID == "" {
-		c.clearSavedFilterSelection()
-		return nil
+		return c.clearSavedFilterSelection(ctx)
 	}
 	return c.applySelectedSavedFilter(ctx, nextActiveID)
 }

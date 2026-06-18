@@ -556,6 +556,14 @@ function createPreviewApi(
     selectDevice: async (_deviceID: string) => undefined,
     applySavedFilter: async (filterID: string) => {
       const next = main.AppState.createFrom(state);
+      if (!filterID) {
+        next.filter.activeFilterId = "";
+        next.filter.draft = "";
+        next.filter.applied = "";
+        next.selectedPackage = "";
+        setState(next);
+        return;
+      }
       const selected = next.filter.saved.find((filter) => filter.id === filterID);
       next.filter.activeFilterId = filterID;
       if (selected) {

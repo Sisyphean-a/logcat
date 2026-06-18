@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/xiakn/logcat/internal/adb"
+	"github.com/xiakn/logcat/internal/logcat"
+	"github.com/xiakn/logcat/internal/session"
 )
 
 func TestControllerUpdateSavedFilterDefinitionRenamesAndApplies(t *testing.T) {
@@ -167,5 +169,104 @@ func TestControllerRestoreSavedFilterSetsPackageAndQueryWithoutDevice(t *testing
 	}
 	if model.Filter.Draft != `message~:"bridge"` || model.Filter.Applied != `message~:"bridge"` {
 		t.Fatalf("expected restored query, got draft=%q applied=%q", model.Filter.Draft, model.Filter.Applied)
+	}
+}
+
+func TestControllerApplySavedFilterEmptyClearsAppliedQuery(t *testing.T) {
+	events := make(chan session.Event, 2)
+	controller := newStreamingController(t, events)
+
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-18 10:00:00.001",
+		Level:    "I",
+		Tag:      "chromium",
+		Message:  "bridge ready",
+		Raw:      "bridge ready",
+	}}
+	events <- session.Event{Entry: &logcat.LogEntry{
+		TimeText: "06-18 10:00:00.002",
+		Level:    "I",
+		Tag:      "ActivityManager",
+		Message:  "plain log",
+		Raw:      "plain log",
+	}}
+
+	waitFor(t, func() bool {
+		return len(controller.Model().VisibleLogs) == 2
+	})
+
+	controller.ReplaceSavedFilters([]SavedFilter{{
+		ID:    "bridge-only",
+		Name:  "Bridge Only",
+		Query: `message~:"bridge"`,
+	}}, "")
+	if err := controller.ApplySavedFilter(context.Background(), "bridge-only"); err != nil {
+		t.Fatalf("ApplySavedFilter returned error: %v", err)
+	}
+	if err := controller.ApplySavedFilter(context.Background(), ""); err != nil {
+		t.Fatalf("clearing saved filter returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.Filter.ActiveFilterID != "" {
+		t.Fatalf("expected active saved filter cleared, got %q", model.Filter.ActiveFilterID)
+	}
+	if model.Filter.Draft != "" || model.Filter.Applied != "" {
+		t.Fatalf("expected query cleared, got draft=%q applied=%q", model.Filter.Draft, model.Filter.Applied)
+	}
+	if len(model.VisibleLogs) != 2 {
+		t.Fatalf("expected visible logs restored, got %d", len(model.VisibleLogs))
+	}
+}
+
+func TestControllerApplySavedFilterEmptyClearsPackageSelection(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "device-1", Model: "Pixel_7", Status: "device"},
+			},
+			packagesByScope: map[adb.PackageScope][]adb.PackageInfo{
+				adb.PackageScopeAll: {{Name: "com.demo.host"}},
+			},
+			processesByPackage: map[string][]adb.ProcessInfo{
+				"com.demo.host": {{PID: 111, Name: "com.demo.host"}},
+			},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "device-1"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+
+	controller.ReplaceSavedFilters([]SavedFilter{{
+		ID:          "host-bridge",
+		Name:        "Host Bridge",
+		PackageName: "com.demo.host",
+		Query:       `message~:"bridge"`,
+	}}, "")
+	if err := controller.ApplySavedFilter(context.Background(), "host-bridge"); err != nil {
+		t.Fatalf("ApplySavedFilter returned error: %v", err)
+	}
+	if err := controller.ApplySavedFilter(context.Background(), ""); err != nil {
+		t.Fatalf("clearing saved filter returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedPackage != "" {
+		t.Fatalf("expected selected package cleared, got %q", model.SelectedPackage)
+	}
+	if model.Filter.Draft != "" || model.Filter.Applied != "" {
+		t.Fatalf("expected query cleared, got draft=%q applied=%q", model.Filter.Draft, model.Filter.Applied)
+	}
+	if len(model.Processes) != 0 {
+		t.Fatalf("expected process list cleared, got %#v", model.Processes)
+	}
+	if len(model.BoundPIDs) != 0 {
+		t.Fatalf("expected bound pids cleared, got %#v", model.BoundPIDs)
 	}
 }
