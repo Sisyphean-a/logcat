@@ -282,8 +282,9 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	focusSourceIndex := c.model.Selection.FocusSourceIndex
 	anchorSourceIndex := c.model.Selection.AnchorSourceIndex
 	searchActive := !c.compiledSearch.matchAll()
+	filterActive := !c.compiledFilter.matchAll()
 	c.syncSearchCacheLocked(searchActive)
-	if c.compiledFilter.matchAll() && !searchActive {
+	if !filterActive && !searchActive {
 		c.model.VisibleLogs = c.allLogs.AppendOrdered(c.model.VisibleLogs)
 		c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 		c.recomputeSearchLocked()
@@ -291,29 +292,164 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 		return
 	}
 
-	if cap(c.model.VisibleLogs) < c.allLogs.Len() {
-		c.model.VisibleLogs = make([]LogViewItem, 0, c.allLogs.Len())
-	} else {
-		c.model.VisibleLogs = c.model.VisibleLogs[:0]
-	}
-	if !searchActive {
-		c.allLogs.Range(func(item LogViewItem) {
-			if !c.matchesVisibleLogLocked(item, "") {
-				return
-			}
-			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
-		})
-	} else {
-		c.allLogs.RangeWithSearchLower(func(item LogViewItem, searchLower string) {
-			if !c.matchesVisibleLogLocked(item, searchLower) {
-				return
-			}
-			c.model.VisibleLogs = append(c.model.VisibleLogs, item)
-		})
+	c.prepareVisibleLogsBufferLocked()
+	switch {
+	case !filterActive:
+		c.appendSearchedVisibleLogsLocked()
+	case !searchActive:
+		c.appendFilteredVisibleLogsLocked()
+	default:
+		c.appendFilteredSearchedVisibleLogsLocked()
 	}
 	c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 	c.recomputeSearchLocked()
 	c.markDirtyLocked()
+}
+
+func (c *Controller) prepareVisibleLogsBufferLocked() {
+	if cap(c.model.VisibleLogs) < c.allLogs.Len() {
+		c.model.VisibleLogs = make([]LogViewItem, 0, c.allLogs.Len())
+		return
+	}
+	c.model.VisibleLogs = c.model.VisibleLogs[:0]
+}
+
+func (c *Controller) appendSearchedVisibleLogsLocked() {
+	items := c.allLogs.items
+	searchLower := c.allLogs.searchLower
+	start := c.allLogs.start
+	query := c.compiledSearch
+	c.model.VisibleLogs = appendSearchedVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		searchLower,
+		start,
+		len(items),
+		query,
+	)
+	if start == 0 {
+		return
+	}
+	c.model.VisibleLogs = appendSearchedVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		searchLower,
+		0,
+		start,
+		query,
+	)
+}
+
+func appendSearchedVisibleLogsSegment(
+	dst []LogViewItem,
+	items []LogViewItem,
+	searchLower []string,
+	start int,
+	end int,
+	query compiledSearchQuery,
+) []LogViewItem {
+	for index := start; index < end; index++ {
+		if !query.matches(searchLower[index]) {
+			continue
+		}
+		dst = append(dst, items[index])
+	}
+	return dst
+}
+
+func (c *Controller) appendFilteredVisibleLogsLocked() {
+	items := c.allLogs.items
+	start := c.allLogs.start
+	filter := c.compiledFilter
+	packageName := c.model.SelectedPackage
+	c.model.VisibleLogs = appendFilteredVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		start,
+		len(items),
+		filter,
+		packageName,
+	)
+	if start == 0 {
+		return
+	}
+	c.model.VisibleLogs = appendFilteredVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		0,
+		start,
+		filter,
+		packageName,
+	)
+}
+
+func appendFilteredVisibleLogsSegment(
+	dst []LogViewItem,
+	items []LogViewItem,
+	start int,
+	end int,
+	filter compiledFilterQuery,
+	packageName string,
+) []LogViewItem {
+	for index := start; index < end; index++ {
+		if !filter.matches(items[index].Entry, packageName) {
+			continue
+		}
+		dst = append(dst, items[index])
+	}
+	return dst
+}
+
+func (c *Controller) appendFilteredSearchedVisibleLogsLocked() {
+	items := c.allLogs.items
+	searchLower := c.allLogs.searchLower
+	start := c.allLogs.start
+	filter := c.compiledFilter
+	query := c.compiledSearch
+	packageName := c.model.SelectedPackage
+	c.model.VisibleLogs = appendFilteredSearchedVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		searchLower,
+		start,
+		len(items),
+		filter,
+		query,
+		packageName,
+	)
+	if start == 0 {
+		return
+	}
+	c.model.VisibleLogs = appendFilteredSearchedVisibleLogsSegment(
+		c.model.VisibleLogs,
+		items,
+		searchLower,
+		0,
+		start,
+		filter,
+		query,
+		packageName,
+	)
+}
+
+func appendFilteredSearchedVisibleLogsSegment(
+	dst []LogViewItem,
+	items []LogViewItem,
+	searchLower []string,
+	start int,
+	end int,
+	filter compiledFilterQuery,
+	query compiledSearchQuery,
+	packageName string,
+) []LogViewItem {
+	for index := start; index < end; index++ {
+		entry := items[index].Entry
+		if !filter.matches(entry, packageName) || !query.matches(searchLower[index]) {
+			continue
+		}
+		dst = append(dst, items[index])
+	}
+	return dst
 }
 
 func normalizedSearchQuery(query string) string {
