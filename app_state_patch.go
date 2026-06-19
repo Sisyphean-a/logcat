@@ -216,12 +216,26 @@ func applyAppendPatch(state AppState, patch StateAppendPatch) AppState {
 	next.TotalLogs = patch.TotalLogs
 	next.VisibleCount = patch.VisibleCount
 	next.SelectedCount = patch.SelectedCount
-	if patch.Dropped > 0 {
-		next.Logs = append([]LogItemView(nil), next.Logs[patch.Dropped:]...)
-	} else {
-		next.Logs = append([]LogItemView(nil), next.Logs...)
+	next.Logs = mergePatchedLogs(state.Logs, patch.Dropped, patch.Appended)
+	if sameSelectedLogView(state.SelectedLog, patch.SelectedLog) {
+		next.SelectedLog = state.SelectedLog
+		return next
 	}
-	next.Logs = append(next.Logs, patch.Appended...)
 	next.SelectedLog = cloneSelectedLog(patch.SelectedLog)
+	return next
+}
+
+func mergePatchedLogs(current []LogItemView, dropped int, appended []LogItemView) []LogItemView {
+	retainedStart := dropped
+	if retainedStart < 0 {
+		retainedStart = 0
+	}
+	if retainedStart > len(current) {
+		retainedStart = len(current)
+	}
+	retainedCount := len(current) - retainedStart
+	next := make([]LogItemView, retainedCount+len(appended))
+	copy(next, current[retainedStart:])
+	copy(next[retainedCount:], appended)
 	return next
 }
