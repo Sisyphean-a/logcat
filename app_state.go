@@ -6,6 +6,7 @@ import (
 )
 
 type AppState struct {
+	Revision        uint64           `json:"revision"`
 	Status          string           `json:"status"`
 	ADBStatus       string           `json:"adbStatus"`
 	Devices         []DeviceView     `json:"devices"`
@@ -13,16 +14,11 @@ type AppState struct {
 	PackageScope    string           `json:"packageScope"`
 	Packages        []PackageView    `json:"packages"`
 	SelectedPackage string           `json:"selectedPackage"`
-	Processes       []ProcessView    `json:"processes"`
-	SelectedProcess string           `json:"selectedProcess"`
-	BoundPIDs       []int            `json:"boundPids"`
 	TotalLogs       int              `json:"totalLogs"`
 	VisibleCount    int              `json:"visibleCount"`
-	VisibleStart    int              `json:"visibleStart"`
 	Filter          FilterView       `json:"filter"`
 	Search          SearchView       `json:"search"`
 	Pause           PauseView        `json:"pause"`
-	SelectedIndex   int              `json:"selectedIndex"`
 	SelectedCount   int              `json:"selectedCount"`
 	Logs            []LogItemView    `json:"logs"`
 	SelectedLog     *SelectedLogView `json:"selectedLog"`
@@ -50,7 +46,6 @@ type FilterView struct {
 	ActiveFilterID  string            `json:"activeFilterId"`
 	DefaultFilterID string            `json:"defaultFilterId"`
 	Saved           []SavedFilterView `json:"saved"`
-	History         []string          `json:"history"`
 }
 
 type SavedFilterView struct {
@@ -65,13 +60,10 @@ type SearchView struct {
 }
 
 type PauseView struct {
-	Active        bool `json:"active"`
-	BufferedCount int  `json:"bufferedCount"`
-	DroppedCount  int  `json:"droppedCount"`
+	Active bool `json:"active"`
 }
 
 type LogItemView struct {
-	Index       int    `json:"index"`
 	SourceIndex int    `json:"sourceIndex"`
 	TimeText    string `json:"timeText"`
 	Level       string `json:"level"`
@@ -82,18 +74,18 @@ type LogItemView struct {
 }
 
 type SelectedLogView struct {
-	TimeText string `json:"timeText"`
-	Level    string `json:"level"`
-	Tag      string `json:"tag"`
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	Raw      string `json:"raw"`
-	Display  string `json:"display"`
+	SourceIndex int    `json:"sourceIndex"`
+	TimeText    string `json:"timeText"`
+	Level       string `json:"level"`
+	Tag         string `json:"tag"`
+	Message     string `json:"message"`
+	Source      string `json:"source"`
 }
 
 func newAppState(snapshot appstate.UISnapshot) AppState {
 	model := snapshot.Model
 	state := AppState{
+		Revision:        snapshot.Revision,
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
 		Devices:         make([]DeviceView, len(model.Devices)),
@@ -101,13 +93,8 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		PackageScope:    string(model.PackageScope),
 		Packages:        make([]PackageView, len(model.Packages)),
 		SelectedPackage: model.SelectedPackage,
-		Processes:       make([]ProcessView, len(model.Processes)),
-		SelectedProcess: model.SelectedProcess,
-		BoundPIDs:       model.BoundPIDs,
 		TotalLogs:       model.TotalLogs,
 		VisibleCount:    snapshot.VisibleCount,
-		VisibleStart:    snapshot.VisibleStart,
-		SelectedIndex:   model.SelectedIndex,
 		SelectedCount:   len(model.Selection.SourceIndexes),
 		Filter: FilterView{
 			Draft:           model.Filter.Draft,
@@ -116,24 +103,13 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 			ActiveFilterID:  model.Filter.ActiveFilterID,
 			DefaultFilterID: model.Filter.DefaultFilterID,
 			Saved:           make([]SavedFilterView, len(model.Filter.Saved)),
-			History:         model.Filter.History,
 		},
 		Search: SearchView{
 			Query: model.Search.Query,
 		},
 		Pause: PauseView{
-			Active:        model.Pause.Active,
-			BufferedCount: model.Pause.BufferedCount,
-			DroppedCount:  model.Pause.DroppedCount,
+			Active: model.Pause.Active,
 		},
-		Logs: make([]LogItemView, len(model.VisibleLogs)),
-	}
-
-	focusedSourceIndex := model.Selection.FocusSourceIndex
-	selectedPos := 0
-	nextSelectedSource := -1
-	if len(model.Selection.SourceIndexes) > 0 {
-		nextSelectedSource = model.Selection.SourceIndexes[0]
 	}
 
 	for index, device := range model.Devices {
@@ -148,13 +124,6 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		state.Packages[index] = PackageView{Name: pkg.Name}
 	}
 
-	for index, process := range model.Processes {
-		state.Processes[index] = ProcessView{
-			PID:  process.PID,
-			Name: process.Name,
-		}
-	}
-
 	for index, filter := range model.Filter.Saved {
 		state.Filter.Saved[index] = SavedFilterView{
 			ID:          filter.ID,
@@ -164,42 +133,78 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		}
 	}
 
-	for offset, item := range model.VisibleLogs {
-		index := snapshot.VisibleStart + offset
-		isSelected := item.SourceIndex == nextSelectedSource
-		if isSelected {
-			selectedPos++
-			if selectedPos < len(model.Selection.SourceIndexes) {
-				nextSelectedSource = model.Selection.SourceIndexes[selectedPos]
-			} else {
-				nextSelectedSource = -1
-			}
-		}
-		row := LogItemView{
-			Index:       index,
-			SourceIndex: item.SourceIndex,
-			TimeText:    item.Entry.TimeText,
-			Level:       item.Entry.Level,
-			Tag:         item.Entry.Tag,
-			Message:     item.Entry.Message,
-			IsFocused:   item.SourceIndex == focusedSourceIndex,
-			IsSelected:  isSelected,
-		}
-		state.Logs[offset] = row
-		if row.IsFocused {
-			state.SelectedLog = &SelectedLogView{
-				TimeText: row.TimeText,
-				Level:    row.Level,
-				Tag:      row.Tag,
-				Message:  row.Message,
-				Source:   item.Entry.Source,
-				Raw:      item.Entry.Raw,
-				Display:  appstate.FormatLogDisplay(item.Entry),
-			}
-		}
-	}
+	state.Logs, state.SelectedLog = buildLogRows(model.VisibleLogs, model.Selection)
 
 	return state
+}
+
+func buildLogRows(
+	items []appstate.LogViewItem,
+	selection appstate.SelectionState,
+) ([]LogItemView, *SelectedLogView) {
+	logs := make([]LogItemView, len(items))
+	cursor := newLogRowCursor(selection)
+
+	var selectedLog *SelectedLogView
+	for offset, item := range items {
+		row := cursor.Next(item)
+		logs[offset] = row
+		if row.IsFocused {
+			selectedLog = buildSelectedLogView(row, item.Entry.Source)
+		}
+	}
+	return logs, selectedLog
+}
+
+type logRowCursor struct {
+	focusedSourceIndex  int
+	selectedSourceIndex []int
+	selectedPos         int
+	nextSelectedSource  int
+}
+
+func newLogRowCursor(selection appstate.SelectionState) logRowCursor {
+	nextSelectedSource := -1
+	if len(selection.SourceIndexes) > 0 {
+		nextSelectedSource = selection.SourceIndexes[0]
+	}
+	return logRowCursor{
+		focusedSourceIndex:  selection.FocusSourceIndex,
+		selectedSourceIndex: selection.SourceIndexes,
+		nextSelectedSource:  nextSelectedSource,
+	}
+}
+
+func (c *logRowCursor) Next(item appstate.LogViewItem) LogItemView {
+	isSelected := item.SourceIndex == c.nextSelectedSource
+	if isSelected {
+		c.selectedPos++
+		if c.selectedPos < len(c.selectedSourceIndex) {
+			c.nextSelectedSource = c.selectedSourceIndex[c.selectedPos]
+		} else {
+			c.nextSelectedSource = -1
+		}
+	}
+	return LogItemView{
+		SourceIndex: item.SourceIndex,
+		TimeText:    item.Entry.TimeText,
+		Level:       item.Entry.Level,
+		Tag:         item.Entry.Tag,
+		Message:     item.Entry.Message,
+		IsFocused:   item.SourceIndex == c.focusedSourceIndex,
+		IsSelected:  isSelected,
+	}
+}
+
+func buildSelectedLogView(row LogItemView, source string) *SelectedLogView {
+	return &SelectedLogView{
+		SourceIndex: row.SourceIndex,
+		TimeText:    row.TimeText,
+		Level:       row.Level,
+		Tag:         row.Tag,
+		Message:     row.Message,
+		Source:      source,
+	}
 }
 
 func appstatePackageScope(scope string) adb.PackageScope {

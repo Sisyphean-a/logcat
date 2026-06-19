@@ -62,6 +62,73 @@ func BenchmarkMarshalAppState(b *testing.B) {
 	})
 }
 
+func BenchmarkMarshalStateAppendPatch(b *testing.B) {
+	prev, nextSnapshot := benchmarkAppendPatchPair()
+	patch, ok := buildStateAppendPatch(prev, nextSnapshot)
+	if !ok {
+		b.Fatal("expected append patch")
+	}
+
+	sample, err := json.Marshal(patch)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportMetric(float64(len(sample)), "json-bytes")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := json.Marshal(patch); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkBuildStateAppendPatch(b *testing.B) {
+	prev, nextSnapshot := benchmarkAppendPatchPair()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := buildStateAppendPatch(prev, nextSnapshot); !ok {
+			b.Fatal("expected append patch")
+		}
+	}
+}
+
+func BenchmarkMarshalSelectionPatch(b *testing.B) {
+	snapshot := benchmarkUISnapshot()
+	snapshot.Revision++
+	snapshot.Model.Selection = appstate.SelectionState{
+		AnchorSourceIndex: 996,
+		FocusSourceIndex:  998,
+		SourceIndexes:     []int{996, 997, 998},
+	}
+	patch := buildSelectionPatch(snapshot)
+
+	sample, err := json.Marshal(patch)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportMetric(float64(len(sample)), "json-bytes")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := json.Marshal(patch); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkBuildSelectionPatch(b *testing.B) {
+	snapshot := benchmarkSelectionSnapshot()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = buildSelectionPatchFromSnapshot(snapshot)
+	}
+}
+
 func benchmarkUISnapshot() appstate.UISnapshot {
 	const total = 1000
 	logs := make([]appstate.LogViewItem, total)
@@ -80,6 +147,7 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 	}
 
 	return appstate.UISnapshot{
+		Revision: 42,
 		Model: appstate.Model{
 			Status:          "running",
 			ADBStatus:       "已连接",
@@ -87,9 +155,6 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 			SelectedDevice:  "dev-1",
 			Packages:        []adb.PackageInfo{{Name: "com.demo.host"}},
 			SelectedPackage: "com.demo.host",
-			Processes:       []adb.ProcessInfo{{PID: 1234, Name: "com.demo.host"}},
-			SelectedProcess: "com.demo.host",
-			BoundPIDs:       []int{111, 222},
 			TotalLogs:       total,
 			VisibleLogs:     logs,
 			Filter: appstate.FilterState{
@@ -103,7 +168,6 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 					PackageName: "com.demo.host",
 					Query:       `tag=chromium`,
 				}},
-				History: []string{"tag=chromium", `message~:"token"`},
 			},
 			Search: appstate.SearchState{
 				Query: "token",
@@ -117,13 +181,46 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 			SelectedIndex: total - 1,
 		},
 		VisibleCount: total,
-		VisibleStart: 0,
+	}
+}
+
+func benchmarkAppendPatchPair() (AppState, appstate.UISnapshot) {
+	prev := newAppState(benchmarkUISnapshot())
+	nextSnapshot := benchmarkUISnapshot()
+	nextSnapshot.Revision++
+	nextSnapshot.Model.TotalLogs++
+	nextSnapshot.VisibleCount++
+	nextSnapshot.Model.VisibleLogs = append(nextSnapshot.Model.VisibleLogs, appstate.LogViewItem{
+		SourceIndex: len(nextSnapshot.Model.VisibleLogs),
+		Entry: logcat.LogEntry{
+			TimeText: "06-10 20:41:46.000",
+			Level:    "I",
+			Tag:      "tag-append",
+			Message:  "[H5] appended benchmark token",
+			Raw:      "raw appended line",
+			Source:   "H5",
+		},
+	})
+	return prev, nextSnapshot
+}
+
+func benchmarkSelectionSnapshot() appstate.SelectionSnapshot {
+	full := benchmarkUISnapshot()
+	return appstate.SelectionSnapshot{
+		VisibleLogs: full.Model.VisibleLogs,
+		Selection: appstate.SelectionState{
+			AnchorSourceIndex: 996,
+			FocusSourceIndex:  998,
+			SourceIndexes:     []int{996, 997, 998},
+		},
+		Revision: full.Revision + 1,
 	}
 }
 
 func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 	model := snapshot.Model
 	state := AppState{
+		Revision:        snapshot.Revision,
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
 		Devices:         make([]DeviceView, 0, len(model.Devices)),
@@ -131,13 +228,8 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		PackageScope:    string(model.PackageScope),
 		Packages:        make([]PackageView, 0, len(model.Packages)),
 		SelectedPackage: model.SelectedPackage,
-		Processes:       make([]ProcessView, 0, len(model.Processes)),
-		SelectedProcess: model.SelectedProcess,
-		BoundPIDs:       append([]int(nil), model.BoundPIDs...),
 		TotalLogs:       model.TotalLogs,
 		VisibleCount:    snapshot.VisibleCount,
-		VisibleStart:    snapshot.VisibleStart,
-		SelectedIndex:   model.SelectedIndex,
 		SelectedCount:   len(model.Selection.SourceIndexes),
 		Filter: FilterView{
 			Draft:           model.Filter.Draft,
@@ -146,15 +238,12 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 			ActiveFilterID:  model.Filter.ActiveFilterID,
 			DefaultFilterID: model.Filter.DefaultFilterID,
 			Saved:           make([]SavedFilterView, 0, len(model.Filter.Saved)),
-			History:         append([]string(nil), model.Filter.History...),
 		},
 		Search: SearchView{
 			Query: model.Search.Query,
 		},
 		Pause: PauseView{
-			Active:        model.Pause.Active,
-			BufferedCount: model.Pause.BufferedCount,
-			DroppedCount:  model.Pause.DroppedCount,
+			Active: model.Pause.Active,
 		},
 		Logs: make([]LogItemView, 0, len(model.VisibleLogs)),
 	}
@@ -173,13 +262,6 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		state.Packages = append(state.Packages, PackageView{Name: pkg.Name})
 	}
 
-	for _, process := range model.Processes {
-		state.Processes = append(state.Processes, ProcessView{
-			PID:  process.PID,
-			Name: process.Name,
-		})
-	}
-
 	for _, filter := range model.Filter.Saved {
 		state.Filter.Saved = append(state.Filter.Saved, SavedFilterView{
 			ID:          filter.ID,
@@ -189,8 +271,7 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		})
 	}
 
-	for offset, item := range model.VisibleLogs {
-		index := snapshot.VisibleStart + offset
+	for _, item := range model.VisibleLogs {
 		isSelected := false
 		for _, selectedSourceIndex := range model.Selection.SourceIndexes {
 			if selectedSourceIndex == item.SourceIndex {
@@ -198,9 +279,7 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 				break
 			}
 		}
-		display := appstate.FormatLogDisplay(item.Entry)
 		row := LogItemView{
-			Index:       index,
 			SourceIndex: item.SourceIndex,
 			TimeText:    item.Entry.TimeText,
 			Level:       item.Entry.Level,
@@ -212,13 +291,12 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		state.Logs = append(state.Logs, row)
 		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
+				SourceIndex: row.SourceIndex,
 				TimeText: row.TimeText,
 				Level:    row.Level,
 				Tag:      row.Tag,
 				Message:  row.Message,
 				Source:   item.Entry.Source,
-				Raw:      item.Entry.Raw,
-				Display:  display,
 			}
 		}
 	}

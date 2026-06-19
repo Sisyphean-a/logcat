@@ -34,9 +34,7 @@ type FilterState struct {
 }
 
 type SearchState struct {
-	Query        string
-	MatchIndexes []int
-	Current      int
+	Query string
 }
 
 type PauseState struct {
@@ -92,7 +90,7 @@ func NewModel() Model {
 			DefaultFilterID: "",
 			Saved:           []SavedFilter{},
 			},
-			Search: SearchState{MatchIndexes: []int{}, Current: -1},
+			Search: SearchState{},
 			Pause:  PauseState{Active: true},
 			Selection: SelectionState{
 				AnchorSourceIndex: -1,

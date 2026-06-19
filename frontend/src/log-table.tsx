@@ -80,7 +80,9 @@ export function LogTable({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const onSelectLogRef = useRef(onSelectLog);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectedCountRef = useRef(selectedCount);
   onSelectLogRef.current = onSelectLog;
+  selectedCountRef.current = selectedCount;
   const handleSelect = useCallback((index: number, mode: LogSelectionMode) => {
     onSelectLogRef.current(index, mode);
   }, []);
@@ -180,18 +182,18 @@ export function LogTable({
     window.addEventListener("mouseup", handleUp);
   }
 
-  function openContextMenu(event: ReactMouseEvent<HTMLButtonElement>, row: LogItemView) {
+  const handleContextMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>, row: LogItemView, visibleIndex: number) => {
     event.preventDefault();
     event.stopPropagation();
     if (!row.isSelected) {
-      handleSelect(row.index, "replace");
+      handleSelect(visibleIndex, "replace");
     }
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
-      hasSelection: (row.isSelected ? selectedCount : 1) > 0,
+      hasSelection: (row.isSelected ? selectedCountRef.current : 1) > 0,
     });
-  }
+  }, [handleSelect]);
 
   function closeContextMenu() {
     setContextMenu(null);
@@ -222,13 +224,13 @@ export function LogTable({
           <div className="placeholder">暂无日志</div>
         ) : (
           <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
-            {logs.slice(start, end).map((log) => (
+            {logs.slice(start, end).map((log, offset) => (
               <LogRow
                 key={log.sourceIndex}
                 log={log}
-                index={log.index}
+                visibleIndex={start + offset}
                 onSelect={handleSelect}
-                onContextMenu={openContextMenu}
+                onContextMenu={handleContextMenu}
                 resultSearch={resultSearch}
               />
             ))}

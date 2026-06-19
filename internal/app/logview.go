@@ -94,8 +94,6 @@ func (c *Controller) ClearVisible() {
 	c.model.TotalLogs = 0
 	c.model.VisibleLogs = c.model.VisibleLogs[:0]
 	c.clearSelectionLocked()
-	c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-	c.model.Search.Current = -1
 	c.markDirtyLocked()
 }
 
@@ -112,16 +110,16 @@ func (c *Controller) NextMatch() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(c.model.Search.MatchIndexes) == 0 {
+	if c.compiledSearch.matchAll() || len(c.model.VisibleLogs) == 0 {
 		return
 	}
 
-	if c.model.Search.Current == -1 {
-		c.model.Search.Current = 0
-	} else {
-		c.model.Search.Current = (c.model.Search.Current + 1) % len(c.model.Search.MatchIndexes)
+	if c.model.SelectedIndex < 0 || c.model.SelectedIndex >= len(c.model.VisibleLogs)-1 {
+		c.setSingleSelectionLocked(0)
+		c.markDirtyLocked()
+		return
 	}
-	c.setSingleSelectionLocked(c.model.Search.MatchIndexes[c.model.Search.Current])
+	c.setSingleSelectionLocked(c.model.SelectedIndex + 1)
 	c.markDirtyLocked()
 }
 
@@ -129,19 +127,16 @@ func (c *Controller) PrevMatch() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(c.model.Search.MatchIndexes) == 0 {
+	if c.compiledSearch.matchAll() || len(c.model.VisibleLogs) == 0 {
 		return
 	}
 
-	if c.model.Search.Current == -1 {
-		c.model.Search.Current = len(c.model.Search.MatchIndexes) - 1
-	} else {
-		c.model.Search.Current--
-		if c.model.Search.Current < 0 {
-			c.model.Search.Current = len(c.model.Search.MatchIndexes) - 1
-		}
+	if c.model.SelectedIndex <= 0 {
+		c.setSingleSelectionLocked(len(c.model.VisibleLogs) - 1)
+		c.markDirtyLocked()
+		return
 	}
-	c.setSingleSelectionLocked(c.model.Search.MatchIndexes[c.model.Search.Current])
+	c.setSingleSelectionLocked(c.model.SelectedIndex - 1)
 	c.markDirtyLocked()
 }
 
@@ -248,60 +243,30 @@ func (c *Controller) dropVisibleBeforeLocked(minSource int) {
 }
 
 func (c *Controller) appendVisibleLogLocked(item LogViewItem) {
-	index := len(c.model.VisibleLogs)
 	c.model.VisibleLogs = append(c.model.VisibleLogs, item)
-	c.appendSearchMatchLocked(index)
-}
-
-func (c *Controller) appendSearchMatchLocked(index int) {
 	if c.compiledSearch.matchAll() {
 		return
 	}
-	c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
-	if c.model.Search.Current != -1 {
+	if c.model.SelectedIndex != -1 {
 		return
 	}
-
-	c.model.Search.Current = 0
 	c.setSingleSelectionLocked(0)
 }
 
 func (c *Controller) recomputeSearchLocked() {
 	if c.compiledSearch.matchAll() {
-		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-		c.model.Search.Current = -1
 		return
 	}
 
-	if cap(c.model.Search.MatchIndexes) < len(c.model.VisibleLogs) {
-		c.model.Search.MatchIndexes = make([]int, 0, len(c.model.VisibleLogs))
-	} else {
-		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-	}
-	for index := range c.model.VisibleLogs {
-		c.model.Search.MatchIndexes = append(c.model.Search.MatchIndexes, index)
-	}
-
-	if len(c.model.Search.MatchIndexes) == 0 {
-		c.model.Search.Current = -1
+	if len(c.model.VisibleLogs) == 0 {
+		c.clearSelectionLocked()
 		return
 	}
 
-	c.syncCurrentMatchToSelectionLocked()
-	if c.model.Search.Current == -1 {
-		c.model.Search.Current = 0
-		c.setSingleSelectionLocked(c.model.Search.MatchIndexes[0])
+	if c.model.SelectedIndex >= 0 && c.model.SelectedIndex < len(c.model.VisibleLogs) {
+		return
 	}
-}
-
-func (c *Controller) syncCurrentMatchToSelectionLocked() {
-	c.model.Search.Current = -1
-	for matchIndex, index := range c.model.Search.MatchIndexes {
-		if index == c.model.SelectedIndex {
-			c.model.Search.Current = matchIndex
-			return
-		}
-	}
+	c.setSingleSelectionLocked(0)
 }
 
 func (c *Controller) updatePausedStatusLocked() {
@@ -389,7 +354,6 @@ func (c *Controller) selectLogLocked(index int, mode SelectionMode) {
 	default:
 		c.setSingleSelectionLocked(index)
 	}
-	c.syncCurrentMatchToSelectionLocked()
 }
 
 func (c *Controller) toggleSelectionLocked(index int) {

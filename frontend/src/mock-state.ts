@@ -1,7 +1,6 @@
 import { main } from "../wailsjs/go/models";
 
 export type PreviewLogRow = {
-  index: number;
   sourceIndex: number;
   timeText: string;
   level: string;
@@ -12,6 +11,7 @@ export type PreviewLogRow = {
 
 export function createMockState() {
   return new main.AppState({
+    revision: 1,
     status: "running",
     adbStatus: "已连接",
     devices: [
@@ -25,15 +25,8 @@ export function createMockState() {
       { name: "com.android.systemui" },
     ],
     selectedPackage: "xxx.hostapp",
-    processes: [
-      { pid: 2001, name: "xxx.hostapp" },
-      { pid: 2002, name: "xxx.hostapp:webview" },
-    ],
-    selectedProcess: "",
-    boundPids: [2001, 2002],
     totalLogs: 17,
     visibleCount: 17,
-    visibleStart: 0,
     filter: {
       draft: `message~:"submit" && -level:I`,
       applied: `message~:"submit" && -level:I`,
@@ -54,20 +47,15 @@ export function createMockState() {
           query: `message~:"submit" && -level:I`,
         },
       ],
-      history: [],
     },
     search: {
       query: "",
     },
     pause: {
       active: false,
-      bufferedCount: 0,
-      droppedCount: 0,
     },
-    selectedIndex: -1,
     selectedCount: 0,
-    logs: createMockPreviewLogs().map((item, index) => ({
-      index,
+    logs: createMockPreviewLogs().map((item) => ({
       sourceIndex: item.sourceIndex,
       timeText: item.timeText,
       level: item.level,
@@ -110,7 +98,6 @@ function logRow(
   source: string,
 ) {
   return {
-    index,
     sourceIndex: index,
     timeText,
     level,

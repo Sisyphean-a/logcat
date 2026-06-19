@@ -20,6 +20,8 @@ export type LogTextToken = {
 export type LogTone = "error" | "info" | "stack" | "warn";
 type HighlightRange = { start: number; end: number };
 type TokenPiece = { text: string; highlight: boolean };
+const emptyHighlightRanges: HighlightRange[] = [];
+const emptyTokenPieces: TokenPiece[] = [];
 
 const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
   { kind: "url", regex: /https?:\/\/[^\s)]+/g },
@@ -32,10 +34,11 @@ const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
 ];
 
 export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: string[]; tokens: LogTextToken[] }) {
-  const ranges = buildHighlightRanges(tokens, highlightTerms);
+  const ranges = getHighlightRanges(tokens, highlightTerms);
+  const piecesByToken = getTokenPieces(tokens, ranges, highlightTerms);
   return tokens.map((token, index) => (
     <Fragment key={`${index}-${token.kind}-${token.start}-${token.end}`}>
-      {splitTokenByRanges(token, ranges).map((piece, pieceIndex) => (
+      {(piecesByToken[index] ?? emptyTokenPieces).map((piece, pieceIndex) => (
         <span
           key={`${index}-${pieceIndex}-${piece.highlight ? "hit" : "plain"}`}
           className={buildTokenClassName(token.kind, piece.highlight)}
@@ -43,18 +46,34 @@ export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: st
           {piece.text}
         </span>
       ))}
+      {(piecesByToken[index] ?? emptyTokenPieces).length === 0 ? (
+        <span className={buildTokenClassName(token.kind, false)}>{token.text}</span>
+      ) : null}
     </Fragment>
   ));
 }
 
 export function buildPlainTextTokens(text: string): LogTextToken[] {
-  return [{ text, kind: "plain", start: 0, end: text.length }];
+  const cached = plainTextTokenCache.get(text);
+  if (cached) {
+    return cached;
+  }
+
+  const tokens = [{ text, kind: "plain", start: 0, end: text.length }] satisfies LogTextToken[];
+  setLimitedCache(plainTextTokenCache, text, tokens, plainTextTokenCacheLimit);
+  return tokens;
 }
 
 // 虚拟滚动反复 remount 同一批行时，缓存命中可跳过 7 条正则扫描。
 // 有界 LRU：超出容量时按插入序淘汰最旧条目，防止长会话内存无限增长。
 const tokenizeCacheLimit = 2000;
 const tokenizeCache = new Map<string, LogTextToken[]>();
+const plainTextTokenCacheLimit = 512;
+const plainTextTokenCache = new Map<string, LogTextToken[]>();
+const highlightRangeCacheLimit = 4096;
+const highlightRangeCache = new Map<string, HighlightRange[]>();
+const tokenTextCache = new WeakMap<LogTextToken[], string>();
+const tokenPiecesCache = new WeakMap<LogTextToken[], Map<string, TokenPiece[][]>>();
 
 export function tokenizeLogText(text: string): LogTextToken[] {
   const cached = tokenizeCache.get(text);
@@ -63,14 +82,7 @@ export function tokenizeLogText(text: string): LogTextToken[] {
   }
 
   const tokens = computeLogTokens(text);
-
-  if (tokenizeCache.size >= tokenizeCacheLimit) {
-    const oldest = tokenizeCache.keys().next().value;
-    if (oldest !== undefined) {
-      tokenizeCache.delete(oldest);
-    }
-  }
-  tokenizeCache.set(text, tokens);
+  setLimitedCache(tokenizeCache, text, tokens, tokenizeCacheLimit);
   return tokens;
 }
 
@@ -112,8 +124,8 @@ export function chipTone(tone: LogTone) {
 }
 
 export function timeOnly(value: string) {
-  const parts = value.split(" ");
-  return parts.length > 1 ? parts[1] : value;
+  const separator = value.indexOf(" ");
+  return separator >= 0 ? value.slice(separator + 1) : value;
 }
 
 function findNextToken(text: string, cursor: number) {
@@ -139,13 +151,19 @@ function findNextToken(text: string, cursor: number) {
   return best;
 }
 
-function buildHighlightRanges(tokens: LogTextToken[], queries: string[]) {
+function getHighlightRanges(tokens: LogTextToken[], queries: string[]) {
   const normalizedQueries = normalizeQueries(queries);
   if (normalizedQueries.length === 0) {
-    return [];
+    return emptyHighlightRanges;
   }
 
-  const text = tokens.map((token) => token.text).join("");
+  const text = tokenText(tokens);
+  const cacheKey = `${normalizedQueries.join("\u0001")}\u0000${text}`;
+  const cached = highlightRangeCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const normalizedText = text.toLowerCase();
   const ranges: HighlightRange[] = [];
 
@@ -160,10 +178,38 @@ function buildHighlightRanges(tokens: LogTextToken[], queries: string[]) {
       cursor = index + query.length;
     }
   }
-  return mergeHighlightRanges(ranges);
+  const merged = mergeHighlightRanges(ranges);
+  setLimitedCache(highlightRangeCache, cacheKey, merged, highlightRangeCacheLimit);
+  return merged;
+}
+
+function getTokenPieces(tokens: LogTextToken[], ranges: HighlightRange[], queries: string[]) {
+  const normalizedQueries = normalizeQueries(queries);
+  if (normalizedQueries.length === 0) {
+    return tokens.map(() => emptyTokenPieces);
+  }
+
+  const cacheKey = normalizedQueries.join("\u0001");
+  const cacheByQuery = tokenPiecesCache.get(tokens);
+  const cached = cacheByQuery?.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const pieces = tokens.map((token) => splitTokenByRanges(token, ranges));
+  if (cacheByQuery) {
+    cacheByQuery.set(cacheKey, pieces);
+  } else {
+    tokenPiecesCache.set(tokens, new Map([[cacheKey, pieces]]));
+  }
+  return pieces;
 }
 
 function splitTokenByRanges(token: LogTextToken, ranges: HighlightRange[]) {
+  if (ranges.length === 0) {
+    return emptyTokenPieces;
+  }
+
   const pieces: TokenPiece[] = [];
   let cursor = token.start;
 
@@ -189,7 +235,7 @@ function splitTokenByRanges(token: LogTextToken, ranges: HighlightRange[]) {
   if (cursor < token.end) {
     pieces.push({ text: sliceTokenText(token, cursor, token.end), highlight: false });
   }
-  return pieces.length > 0 ? pieces : [{ text: token.text, highlight: false }];
+  return pieces.length > 0 ? pieces : emptyTokenPieces;
 }
 
 function sliceTokenText(token: LogTextToken, start: number, end: number) {
@@ -225,4 +271,25 @@ function mergeHighlightRanges(ranges: HighlightRange[]) {
     last.end = Math.max(last.end, current.end);
   }
   return merged;
+}
+
+function tokenText(tokens: LogTextToken[]) {
+  const cached = tokenTextCache.get(tokens);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const text = tokens.map((token) => token.text).join("");
+  tokenTextCache.set(tokens, text);
+  return text;
+}
+
+function setLimitedCache<TKey, TValue>(cache: Map<TKey, TValue>, key: TKey, value: TValue, limit: number) {
+  if (cache.size >= limit) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) {
+      cache.delete(oldest);
+    }
+  }
+  cache.set(key, value);
 }

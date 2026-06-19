@@ -13,13 +13,16 @@ import (
 )
 
 const stateEventName = "state:updated"
+const stateAppendEventName = "state:append"
 const uiLogWindowSize = 1000
 const emitThrottle = 16 * time.Millisecond
 
 type App struct {
-	ctx         context.Context
-	controller  *appstate.Controller
-	lastEmitRev uint64
+	ctx           context.Context
+	controller    *appstate.Controller
+	lastEmitRev   uint64
+	lastEmitState AppState
+	hasEmitState  bool
 }
 
 type LogSelectionRequest struct {
@@ -154,28 +157,36 @@ func (a *App) SetSearchQuery(query string) AppState {
 	return a.emitAndSnapshot()
 }
 
-func (a *App) NextMatch() AppState {
+func (a *App) NextMatch() SelectionPatch {
 	a.controller.NextMatch()
-	return a.emitAndSnapshot()
+	return a.selectionPatchSnapshot()
 }
 
-func (a *App) PrevMatch() AppState {
+func (a *App) PrevMatch() SelectionPatch {
 	a.controller.PrevMatch()
-	return a.emitAndSnapshot()
+	return a.selectionPatchSnapshot()
 }
 
-func (a *App) SelectLog(index int) AppState {
+func (a *App) SelectLog(index int) SelectionPatch {
 	a.controller.SelectLog(index)
-	return a.emitAndSnapshot()
+	return a.selectionPatchSnapshot()
 }
 
-func (a *App) SelectLogs(request LogSelectionRequest) AppState {
+func (a *App) SelectLogs(request LogSelectionRequest) SelectionPatch {
 	a.controller.SelectLogWithMode(request.Index, request.Mode)
-	return a.emitAndSnapshot()
+	return a.selectionPatchSnapshot()
 }
 
 func (a *App) CopySelectedLogs() error {
 	return a.CopyText(a.controller.SelectedLogsText())
+}
+
+func (a *App) GetSelectedLogRaw() string {
+	item, ok := a.controller.SelectedLog()
+	if !ok {
+		return ""
+	}
+	return item.Entry.Raw
 }
 
 func (a *App) CopyAllVisibleLogs() error {
@@ -266,7 +277,16 @@ func (a *App) emitStateIfDirty() {
 		return
 	}
 	a.lastEmitRev = snapshot.Revision
+	if a.hasEmitState {
+		if patch, ok := buildStateAppendPatch(a.lastEmitState, snapshot); ok {
+			a.lastEmitState = applyAppendPatch(a.lastEmitState, patch)
+			runtime.EventsEmit(a.ctx, stateAppendEventName, patch)
+			return
+		}
+	}
 	state := newAppState(snapshot)
+	a.lastEmitState = state
+	a.hasEmitState = true
 	runtime.EventsEmit(a.ctx, stateEventName, state)
 }
 
@@ -275,7 +295,19 @@ func (a *App) emitAndSnapshot() AppState {
 	a.lastEmitRev = snapshot.Revision
 	// 直返型 RPC 的调用方会直接消费返回值；这里再发同一份 state:updated
 	// 事件只会造成重复序列化、重复前端 setState 和额外瞬时内存。
-	return newAppState(snapshot)
+	state := newAppState(snapshot)
+	a.lastEmitState = state
+	a.hasEmitState = true
+	return state
+}
+
+func (a *App) selectionPatchSnapshot() SelectionPatch {
+	snapshot := a.controller.SelectionSnapshot(uiLogWindowSize)
+	patch := buildSelectionPatchFromSnapshot(snapshot)
+	a.lastEmitRev = snapshot.Revision
+	a.lastEmitState = applySelectionPatch(a.lastEmitState, patch)
+	a.hasEmitState = true
+	return patch
 }
 
 func newStoppedTimer() *time.Timer {

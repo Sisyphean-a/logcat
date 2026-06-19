@@ -34,6 +34,10 @@ export function ExportVisibleLogs() {
   return window['go']['main']['App']['ExportVisibleLogs']();
 }
 
+export function GetSelectedLogRaw() {
+  return window['go']['main']['App']['GetSelectedLogRaw']();
+}
+
 export function GetState() {
   return window['go']['main']['App']['GetState']();
 }

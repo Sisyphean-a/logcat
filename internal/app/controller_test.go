@@ -561,12 +561,6 @@ func TestControllerClearVisibleResetsListSelectionAndSearch(t *testing.T) {
 	if model.SelectedIndex != -1 {
 		t.Fatalf("expected selection reset, got %d", model.SelectedIndex)
 	}
-	if len(model.Search.MatchIndexes) != 0 {
-		t.Fatalf("expected matches to be cleared, got %d", len(model.Search.MatchIndexes))
-	}
-	if model.Search.Current != -1 {
-		t.Fatalf("expected current match reset, got %d", model.Search.Current)
-	}
 	if model.Search.Query != "token" {
 		t.Fatalf("expected query to stay for future logs, got %q", model.Search.Query)
 	}
@@ -587,14 +581,8 @@ func TestControllerSearchTracksMatchesAndCurrentSelection(t *testing.T) {
 	controller.SetSearchQuery("token")
 
 	model := controller.Model()
-	if len(model.Search.MatchIndexes) != 2 {
-		t.Fatalf("expected 2 matches, got %d", len(model.Search.MatchIndexes))
-	}
-	if model.Search.Current != 0 {
-		t.Fatalf("expected first match selected, got %d", model.Search.Current)
-	}
-	if model.SelectedIndex != model.Search.MatchIndexes[0] {
-		t.Fatalf("expected selection to follow first match, got %d", model.SelectedIndex)
+	if model.SelectedIndex != 0 {
+		t.Fatalf("expected first match selected, got %d", model.SelectedIndex)
 	}
 	if len(model.VisibleLogs) != 2 {
 		t.Fatalf("expected search to narrow visible logs, got %d", len(model.VisibleLogs))
@@ -602,17 +590,14 @@ func TestControllerSearchTracksMatchesAndCurrentSelection(t *testing.T) {
 
 	controller.NextMatch()
 	model = controller.Model()
-	if model.Search.Current != 1 {
-		t.Fatalf("expected second match selected, got %d", model.Search.Current)
-	}
-	if model.SelectedIndex != model.Search.MatchIndexes[1] {
+	if model.SelectedIndex != 1 {
 		t.Fatalf("expected selection to follow second match, got %d", model.SelectedIndex)
 	}
 
 	controller.PrevMatch()
 	model = controller.Model()
-	if model.Search.Current != 0 {
-		t.Fatalf("expected previous match to wrap back to first, got %d", model.Search.Current)
+	if model.SelectedIndex != 0 {
+		t.Fatalf("expected previous match to wrap back to first, got %d", model.SelectedIndex)
 	}
 }
 
@@ -688,13 +673,10 @@ func TestControllerConsumeRecomputesMatchesWhenLogsArrive(t *testing.T) {
 	events <- session.Event{Entry: makeEntry("[H5] token late")}
 
 	waitFor(t, func() bool {
-		return len(controller.Model().Search.MatchIndexes) == 1
+		return len(controller.Model().VisibleLogs) == 1
 	})
 
 	model := controller.Model()
-	if model.Search.Current != 0 {
-		t.Fatalf("expected current match to move to first result, got %d", model.Search.Current)
-	}
 	if model.SelectedIndex != 0 {
 		t.Fatalf("expected selection to follow incoming match, got %d", model.SelectedIndex)
 	}

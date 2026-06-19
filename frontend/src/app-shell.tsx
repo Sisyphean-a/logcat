@@ -9,6 +9,7 @@ import {
 import { LogDetailView } from "./log-detail";
 import { timeOnly } from "./log-text";
 import { SelectControl } from "./select-control";
+import { type SelectedLogDetail } from "./use-app-controller";
 
 export type AppState = main.AppState;
 
@@ -25,6 +26,7 @@ type FilterBarProps = {
 type DetailPanelProps = {
   state: AppState;
   collapsed: boolean;
+  detail: SelectedLogDetail | undefined;
   onToggle: () => void;
   onCopyDisplay: () => void;
   onCopyRaw: () => void;
@@ -226,6 +228,7 @@ function ResultSearchInput({ value, onChange }: ResultSearchInputProps) {
 export function DetailPanel({
   state,
   collapsed,
+  detail,
   onToggle,
   onCopyDisplay,
   onCopyRaw,
@@ -295,7 +298,7 @@ export function DetailPanel({
               </div>
               <div className="detail-block">
                 <div className="detail-title">原始日志</div>
-                <pre className="detail-rich-text">{state.selectedLog.raw}</pre>
+                <pre className="detail-rich-text">{detail?.raw ?? "点击“复制原文”时按需读取"}</pre>
               </div>
             </div>
           ) : (

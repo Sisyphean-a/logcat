@@ -19,13 +19,15 @@ export function CopyText(arg1:string):Promise<void>;
 
 export function ExportVisibleLogs():Promise<string>;
 
+export function GetSelectedLogRaw():Promise<string>;
+
 export function GetState():Promise<main.AppState>;
 
-export function NextMatch():Promise<main.AppState>;
+export function NextMatch():Promise<main.SelectionPatch>;
 
 export function Pause():Promise<main.AppState>;
 
-export function PrevMatch():Promise<main.AppState>;
+export function PrevMatch():Promise<main.SelectionPatch>;
 
 export function ReplaceSavedFilterDefinitions(arg1:Array<app.SavedFilterDraft>,arg2:string,arg3:string):Promise<void>;
 
@@ -41,9 +43,9 @@ export function SelectDevice(arg1:string):Promise<void>;
 
 export function SelectForegroundPackage():Promise<void>;
 
-export function SelectLog(arg1:number):Promise<main.AppState>;
+export function SelectLog(arg1:number):Promise<main.SelectionPatch>;
 
-export function SelectLogs(arg1:main.LogSelectionRequest):Promise<main.AppState>;
+export function SelectLogs(arg1:main.LogSelectionRequest):Promise<main.SelectionPatch>;
 
 export function SelectPackage(arg1:string):Promise<void>;
 

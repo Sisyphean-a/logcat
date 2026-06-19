@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { EventsOff, EventsOn } from "../wailsjs/runtime/runtime";
 import { app, main } from "../wailsjs/go/models";
 import { createMockPreviewLogs, createMockState, type PreviewLogRow } from "./mock-state";
@@ -11,6 +11,7 @@ import {
   CopyText,
   ExportVisibleLogs,
   GetState,
+  GetSelectedLogRaw,
   Pause,
   ReplaceSavedFilterDefinitions,
   ResumeKeep,
@@ -33,8 +34,24 @@ export type ResultSearchPreview = {
   query: string;
   highlightTerms: string[];
 };
+export type SelectedLogDetail = {
+  raw: string;
+};
 
 const stateEventName = "state:updated";
+const stateAppendEventName = "state:append";
+
+type StateAppendPatch = {
+  revision: number;
+  totalLogs: number;
+  visibleCount: number;
+  dropped: number;
+  appended: AppState["logs"];
+  selectedCount: number;
+  selectedLog?: AppState["selectedLog"];
+};
+
+type SelectionPatch = main.SelectionPatch;
 
 export function useAppController() {
   const [state, setState] = useState<AppState>(emptyState);
@@ -49,11 +66,156 @@ export function useAppController() {
   const ignoreScrollRef = useRef(false);
   const previewAllLogsRef = useRef<PreviewLogRow[]>([]);
   const stateRef = useRef(state);
+  const selectedLogRawRef = useRef("");
+  const latestRevisionRef = useRef(state.revision);
+  const pendingEventStateRef = useRef<AppState | null>(null);
+  const pendingEventFrameRef = useRef<number | null>(null);
+  const pendingMetricsNodeRef = useRef<HTMLDivElement | null>(null);
+  const pendingMetricsFrameRef = useRef<number | null>(null);
   stateRef.current = state;
+  latestRevisionRef.current = state.revision;
 
   function syncTableMetrics(node: HTMLDivElement) {
     setScrollTop(node.scrollTop);
     setViewportHeight(node.clientHeight);
+  }
+
+  function flushPendingMetrics() {
+    pendingMetricsFrameRef.current = null;
+    const node = pendingMetricsNodeRef.current;
+    pendingMetricsNodeRef.current = null;
+    if (!node) {
+      return;
+    }
+    syncTableMetrics(node);
+  }
+
+  function queueTableMetrics(node: HTMLDivElement) {
+    pendingMetricsNodeRef.current = node;
+    if (pendingMetricsFrameRef.current !== null) {
+      return;
+    }
+    pendingMetricsFrameRef.current = requestAnimationFrame(flushPendingMetrics);
+  }
+
+  function applyNextState(next: AppState, options?: { clearSelectedRaw?: boolean; urgent?: boolean }) {
+    const clearSelectedRaw = options?.clearSelectedRaw ?? false;
+    const urgent = options?.urgent ?? false;
+    if (next.revision < latestRevisionRef.current) {
+      return;
+    }
+    latestRevisionRef.current = next.revision;
+    if (clearSelectedRaw) {
+      selectedLogRawRef.current = "";
+    }
+    const commit = () => setState(next);
+    if (urgent) {
+      commit();
+      return;
+    }
+    startTransition(commit);
+  }
+
+  function cancelPendingEventFrame() {
+    if (pendingEventFrameRef.current === null) {
+      return;
+    }
+    cancelAnimationFrame(pendingEventFrameRef.current);
+    pendingEventFrameRef.current = null;
+  }
+
+  function flushPendingEventState() {
+    pendingEventFrameRef.current = null;
+    const next = pendingEventStateRef.current;
+    pendingEventStateRef.current = null;
+    if (!next) {
+      return;
+    }
+    applyNextState(next);
+  }
+
+  function queueEventState(next: AppState) {
+    if (next.revision < latestRevisionRef.current) {
+      return;
+    }
+    const pending = pendingEventStateRef.current;
+    if (!pending || next.revision >= pending.revision) {
+      pendingEventStateRef.current = next;
+    }
+    if (pendingEventFrameRef.current !== null) {
+      return;
+    }
+    pendingEventFrameRef.current = requestAnimationFrame(flushPendingEventState);
+  }
+
+  function applyAppendPatch(patch: StateAppendPatch) {
+    if (patch.revision < latestRevisionRef.current) {
+      return;
+    }
+    startTransition(() => {
+      setState((current) => {
+        if (patch.revision < current.revision) {
+          return current;
+        }
+        const retained = patch.dropped > 0 ? current.logs.slice(patch.dropped) : current.logs.slice();
+        const appended = patch.appended.map((row) => main.LogItemView.createFrom(row));
+        const next = cloneAppStateShell(current);
+        next.revision = patch.revision;
+        next.totalLogs = patch.totalLogs;
+        next.visibleCount = patch.visibleCount;
+        next.selectedCount = patch.selectedCount;
+        next.selectedLog = patch.selectedLog
+          ? main.SelectedLogView.createFrom(patch.selectedLog)
+          : undefined;
+        next.logs = retained.concat(appended);
+        latestRevisionRef.current = patch.revision;
+        return next;
+      });
+    });
+  }
+
+  function applySelectionPatch(patch: SelectionPatch) {
+    if (patch.revision < latestRevisionRef.current) {
+      return;
+    }
+    selectedLogRawRef.current = "";
+    startTransition(() => {
+      setState((current) => {
+        if (patch.revision < current.revision) {
+          return current;
+        }
+        const selected = new Set(patch.selectedSourceIndexes);
+        let changed = false;
+        const nextLogs = current.logs.map((row) => {
+          const isFocused = row.sourceIndex === patch.focusedSourceIndex;
+          const isSelected = selected.has(row.sourceIndex);
+          if (row.isFocused === isFocused && row.isSelected === isSelected) {
+            return row;
+          }
+          changed = true;
+          return main.LogItemView.createFrom({
+            ...row,
+            isFocused,
+            isSelected,
+          });
+        });
+        const nextSelectedLog = patch.selectedLog
+          ? current.selectedLog && sameSelectedLog(current.selectedLog, patch.selectedLog)
+            ? current.selectedLog
+            : main.SelectedLogView.createFrom(patch.selectedLog)
+          : undefined;
+        latestRevisionRef.current = patch.revision;
+        const next = cloneAppStateShell(current);
+        next.revision = patch.revision;
+        if (!changed && current.selectedCount === patch.selectedCount && current.selectedLog === nextSelectedLog) {
+          return next;
+        }
+        next.selectedCount = patch.selectedCount;
+        next.selectedLog = nextSelectedLog;
+        next.logs = nextLogs;
+        return next;
+      });
+    });
   }
 
   useEffect(() => {
@@ -64,7 +226,7 @@ export function useAppController() {
     if (!isWailsRuntime()) {
       const snapshot = createMockState();
       previewAllLogsRef.current = createMockPreviewLogs();
-      setState(snapshot);
+      applyNextState(snapshot, { urgent: true });
       setLoading(false);
       return;
     }
@@ -76,7 +238,7 @@ export function useAppController() {
         if (!mounted) {
           return;
         }
-        setState(next);
+        applyNextState(next, { clearSelectedRaw: true, urgent: true });
         setLoading(false);
       })
       .catch((error: unknown) => {
@@ -90,13 +252,25 @@ export function useAppController() {
     // 流式热路径：事件 payload 已是反序列化的纯对象，组件只读字段、
     // 不调用类方法，直接 setState 可省去每帧对 ~1000 条日志的深拷贝重建。
     const handler = (next: AppState) => {
-      setState(next);
+      queueEventState(next);
+    };
+    const appendHandler = (patch: StateAppendPatch) => {
+      applyAppendPatch(patch);
     };
 
     EventsOn(stateEventName, handler);
+    EventsOn(stateAppendEventName, appendHandler);
     return () => {
       mounted = false;
+      cancelPendingEventFrame();
+      pendingEventStateRef.current = null;
+      if (pendingMetricsFrameRef.current !== null) {
+        cancelAnimationFrame(pendingMetricsFrameRef.current);
+        pendingMetricsFrameRef.current = null;
+      }
+      pendingMetricsNodeRef.current = null;
       EventsOff(stateEventName);
+      EventsOff(stateAppendEventName);
     };
   }, []);
 
@@ -111,7 +285,7 @@ export function useAppController() {
     if (!node) {
       return;
     }
-    syncTableMetrics(node);
+    queueTableMetrics(node);
   }, [state.logs.length]);
 
   const api = useMemo(
@@ -120,14 +294,24 @@ export function useAppController() {
       applySavedFilter: (filterID: string) => withAction(() => ApplySavedFilter(filterID), setActionError),
       selectPackage: (packageName: string) => withAction(() => SelectPackage(packageName), setActionError),
       setPackageScope: (scope: string) => withAction(() => SetPackageScope(scope), setActionError),
+      getSelectedLogDetail: async (): Promise<SelectedLogDetail | undefined> => {
+        const selected = stateRef.current.selectedLog;
+        if (!selected) {
+          selectedLogRawRef.current = "";
+          return undefined;
+        }
+        const raw = await GetSelectedLogRaw();
+        selectedLogRawRef.current = raw;
+        return { raw };
+      },
       setFilterDraft: (query: string) =>
-        SetFilterDraft(query).then((next: AppState) => setState(next)),
+        SetFilterDraft(query).then((next: AppState) => applyNextState(next, { urgent: true })),
       setSearchQuery: (query: string) =>
-        SetSearchQuery(query).then((next: AppState) => setState(next)),
+        SetSearchQuery(query).then((next: AppState) => applyNextState(next)),
       applyFilter: async (query?: string) => {
         if (query !== undefined) {
           const next = await SetFilterDraft(query);
-          setState(next);
+          applyNextState(next, { urgent: true });
         }
         await withAction(ApplyFilterDraft, setActionError);
       },
@@ -137,21 +321,33 @@ export function useAppController() {
         if (!selected) {
           return;
         }
-        const value = kind === "raw" ? selected.raw : kind === "message" ? selected.message : selected.display;
+        let value = selected.message;
+        if (kind === "display") {
+          value = formatPreviewLogDisplay(selected);
+        } else if (kind === "raw") {
+          value = selectedLogRawRef.current || await GetSelectedLogRaw();
+          selectedLogRawRef.current = value;
+        }
         await withAction(() => CopyText(value), setActionError);
       },
       copySelectedLogs: () => withAction(CopySelectedLogs, setActionError),
       copyAllVisibleLogs: () => withAction(CopyAllVisibleLogs, setActionError),
       selectLog: (index: number) =>
-        SelectLog(index).then((next: AppState) => setState(next)),
+        SelectLog(index).then((patch: SelectionPatch) => {
+          applySelectionPatch(patch);
+        }),
       selectLogs: (index: number, mode: LogSelectionMode) =>
-        SelectLogs({ index, mode }).then((next: AppState) => setState(next)),
+        SelectLogs({ index, mode }).then((patch: SelectionPatch) => {
+          applySelectionPatch(patch);
+        }),
       pauseToggle: async () => {
         const next = stateRef.current.pause.active ? await ResumeKeep() : await Pause();
-        setState(next);
+        applyNextState(next);
       },
       clearVisible: () =>
-        ClearVisible().then((next: AppState) => setState(next)),
+        ClearVisible().then((next: AppState) => {
+          applyNextState(next, { clearSelectedRaw: true });
+        }),
       saveFilter: async (draft: SaveFilterDraft) => {
         await withAction(
           () => SaveFilterDefinition(draft.name, draft.packageName, draft.query),
@@ -221,7 +417,7 @@ export function useAppController() {
       return;
     }
 
-    syncTableMetrics(node);
+    queueTableMetrics(node);
     if (ignoreScrollRef.current) {
       return;
     }
@@ -253,7 +449,7 @@ export function useAppController() {
         return;
       }
       currentNode.scrollTop = currentNode.scrollHeight;
-      syncTableMetrics(currentNode);
+      queueTableMetrics(currentNode);
       requestAnimationFrame(() => {
         ignoreScrollRef.current = false;
       });
@@ -305,6 +501,7 @@ function hasActiveTextSelection() {
 }
 
 const emptyState = new main.AppState({
+  revision: 0,
   status: "loading",
   adbStatus: "未连接",
   devices: [],
@@ -312,12 +509,8 @@ const emptyState = new main.AppState({
   packageScope: "all",
   packages: [],
   selectedPackage: "",
-  processes: [],
-  selectedProcess: "",
-  boundPids: [],
   totalLogs: 0,
   visibleCount: 0,
-  visibleStart: 0,
   filter: {
     draft: "",
     applied: "",
@@ -325,17 +518,13 @@ const emptyState = new main.AppState({
     activeFilterId: "",
     defaultFilterId: "",
     saved: [],
-    history: [],
   },
   search: {
     query: "",
   },
   pause: {
     active: false,
-    bufferedCount: 0,
-    droppedCount: 0,
   },
-  selectedIndex: -1,
   selectedCount: 0,
   logs: [],
 });
@@ -353,16 +542,30 @@ function buildPreviewSearchState(
     : allLogs.filter((item) => matchesPreviewSearch(item, compiledQuery));
 
   next.search.query = query;
-  next.logs = visibleLogs.map((item, index) => main.LogItemView.createFrom({
+  next.logs = visibleLogs.map((item) => main.LogItemView.createFrom({
     ...item,
-    index,
     isFocused: false,
     isSelected: false,
   }));
   next.visibleCount = next.logs.length;
-  next.visibleStart = 0;
   syncPreviewSelection(next, { sourceIndex: selectedSourceIndex, mode: "replace" }, compiledQuery.active, allLogs);
   return next;
+}
+
+function sameSelectedLog(
+  current: NonNullable<AppState["selectedLog"]>,
+  next: NonNullable<AppState["selectedLog"]>,
+) {
+  return current.sourceIndex === next.sourceIndex &&
+    current.timeText === next.timeText &&
+    current.level === next.level &&
+    current.tag === next.tag &&
+    current.message === next.message &&
+    current.source === next.source;
+}
+
+function cloneAppStateShell(current: AppState) {
+  return Object.assign(Object.create(Object.getPrototypeOf(current)), current) as AppState;
 }
 
 function syncPreviewSelection(
@@ -410,7 +613,6 @@ function syncPreviewSelection(
     selected.clear();
   }
 
-  state.selectedIndex = nextFocusedIndex;
   state.selectedCount = selected.size;
   state.logs = state.logs.map((item, index) => {
     item.isSelected = selected.has(item.sourceIndex);
@@ -426,13 +628,12 @@ function buildPreviewSelectedLog(log?: main.LogItemView, allLogs: PreviewLogRow[
   }
   const source = allLogs.find((item) => item.sourceIndex === log.sourceIndex)?.source ?? "";
   return {
+    sourceIndex: log.sourceIndex,
     timeText: log.timeText,
     level: log.level,
     tag: log.tag,
     message: log.message,
     source,
-    raw: formatPreviewLogDisplay(log),
-    display: formatPreviewLogDisplay(log),
   };
 }
 
@@ -441,7 +642,7 @@ function formatPreviewLogDisplay(log: Pick<main.LogItemView, "timeText" | "level
 }
 
 function currentPreviewSelectionSourceIndex(state: AppState) {
-  return state.selectedIndex >= 0 ? state.logs[state.selectedIndex]?.sourceIndex ?? -1 : -1;
+  return state.logs.find((item) => item.isFocused)?.sourceIndex ?? -1;
 }
 
 function joinPreviewLogs(logs: main.LogItemView[]) {
@@ -602,6 +803,13 @@ function createPreviewApi(
       setState(next);
     },
     exportVisible: async () => setError("浏览器预览模式不执行导出"),
+    getSelectedLogDetail: async () => {
+      const selected = state.selectedLog;
+      if (!selected) {
+        return undefined;
+      }
+      return { raw: formatPreviewLogDisplay(selected) };
+    },
     copySelected: async () => undefined,
     copySelectedLogs: async () => {
       const selected = state.logs.filter((item) => item.isSelected);
@@ -641,8 +849,6 @@ function createPreviewApi(
       allLogsRef.current = [];
       next.logs = [];
       next.visibleCount = 0;
-      next.visibleStart = 0;
-      next.selectedIndex = -1;
       next.selectedCount = 0;
       next.selectedLog = undefined;
       setState(next);

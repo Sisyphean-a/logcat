@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { DetailPanel, FilterBar, StatusBar } from "./app-shell";
 import { suggestFilterName } from "./filter-rule-builder";
 import { LogTable } from "./log-table";
@@ -7,7 +7,7 @@ import { SavedFiltersDialog } from "./saved-filters-dialog";
 import { type SavedFiltersDraft } from "./saved-filter-types";
 import { SettingsDialog } from "./settings-dialog";
 import { Toolbar } from "./toolbar";
-import { buildResultSearchPreview, useAppController } from "./use-app-controller";
+import { buildResultSearchPreview, type SelectedLogDetail, useAppController } from "./use-app-controller";
 import { useViewSettings } from "./view-settings";
 
 export default function App() {
@@ -18,6 +18,7 @@ export default function App() {
   const [manageDialogBusy, setManageDialogBusy] = useState(false);
   const [manageDialogError, setManageDialogError] = useState("");
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<SelectedLogDetail>();
   const { settings, shellStyle, updateSetting, updateTheme, resetSettings } = useViewSettings();
   const {
     state,
@@ -33,7 +34,18 @@ export default function App() {
     handleScroll,
     api,
   } = useAppController();
-  const resultSearch = buildResultSearchPreview(state.search.query);
+  const resultSearch = useMemo(
+    () => buildResultSearchPreview(state.search.query),
+    [state.search.query],
+  );
+
+  useEffect(() => {
+    if (!state.selectedLog) {
+      startTransition(() => setSelectedDetail(undefined));
+    } else {
+      startTransition(() => setSelectedDetail(undefined));
+    }
+  }, [state.selectedLog?.sourceIndex]);
 
   async function handleSaveFilter(draft: { name: string; packageName: string; query: string }) {
     setSaveDialogBusy(true);
@@ -121,6 +133,7 @@ export default function App() {
         <DetailPanel
           state={state}
           collapsed={detailCollapsed}
+          detail={selectedDetail}
           onToggle={() => setDetailCollapsed((value) => !value)}
           onCopyDisplay={() => void api.copySelected("display")}
           onCopyRaw={() => void api.copySelected("raw")}

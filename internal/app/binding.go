@@ -240,8 +240,6 @@ func (c *Controller) resetBindingViewLocked(clearLogs bool) {
 		c.model.TotalLogs = 0
 		c.model.VisibleLogs = c.model.VisibleLogs[:0]
 		c.model.SelectedIndex = -1
-		c.model.Search.MatchIndexes = c.model.Search.MatchIndexes[:0]
-		c.model.Search.Current = -1
 	}
 	c.pauseBuffer = c.pauseBuffer[:0]
 	c.model.Pause.BufferedCount = 0

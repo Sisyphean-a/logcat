@@ -5,13 +5,13 @@ import { type LogSelectionMode, type ResultSearchPreview } from "./use-app-contr
 
 type LogRowProps = {
   log: LogItemView;
-  index: number;
+  visibleIndex: number;
   onSelect: (index: number, mode: LogSelectionMode) => void;
-  onContextMenu: (event: MouseEvent<HTMLButtonElement>, log: LogItemView) => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>, log: LogItemView, visibleIndex: number) => void;
   resultSearch: ResultSearchPreview;
 };
 
-function LogRowComponent({ log, index, onSelect, onContextMenu, resultSearch }: LogRowProps) {
+function LogRowComponent({ log, visibleIndex, onSelect, onContextMenu, resultSearch }: LogRowProps) {
   const isCurrent = resultSearch.query.trim().length > 0 && log.isFocused;
   const tone = getLogSemanticTone(log);
   const messageTokens = tokenizeLogText(log.message);
@@ -24,8 +24,8 @@ function LogRowComponent({ log, index, onSelect, onContextMenu, resultSearch }: 
         log.isFocused ? "focused" : "",
         isCurrent ? "current" : "",
       ].join(" ")}
-      onClick={(event) => onSelect(index, resolveSelectionMode(event))}
-      onContextMenu={(event) => onContextMenu(event, log)}
+      onClick={(event) => onSelect(visibleIndex, resolveSelectionMode(event))}
+      onContextMenu={(event) => onContextMenu(event, log, visibleIndex)}
     >
       <span className="time-cell">{timeOnly(log.timeText)}</span>
       <span className={`level-chip ${chipTone(tone)}`}>{log.level}</span>
@@ -41,7 +41,7 @@ function LogRowComponent({ log, index, onSelect, onContextMenu, resultSearch }: 
 
 function areEqual(prev: LogRowProps, next: LogRowProps) {
   return (
-    prev.index === next.index &&
+    prev.visibleIndex === next.visibleIndex &&
     prev.onSelect === next.onSelect &&
     prev.onContextMenu === next.onContextMenu &&
     prev.resultSearch.query === next.resultSearch.query &&

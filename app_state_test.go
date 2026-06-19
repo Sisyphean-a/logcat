@@ -8,7 +8,7 @@ import (
 	"github.com/xiakn/logcat/internal/logcat"
 )
 
-func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
+func TestNewAppStateSelectedLogOmitsRawPayload(t *testing.T) {
 	message := "[H5] " + strings.Repeat("x", 5000)
 	raw := "06-10 20:41:45.478 1234 1234 I chromium: " + message
 	snapshot := appstate.UISnapshot{
@@ -33,6 +33,9 @@ func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
 	}
 
 	state := newAppState(snapshot)
+	if state.Revision != 0 {
+		t.Fatalf("expected revision 0, got %d", state.Revision)
+	}
 	if len(state.Logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(state.Logs))
 	}
@@ -42,7 +45,10 @@ func TestNewAppStatePreservesSelectedRawLog(t *testing.T) {
 	if state.SelectedLog == nil {
 		t.Fatal("expected selected log")
 	}
-	if state.SelectedLog.Raw != raw {
-		t.Fatal("expected selected raw to stay unchanged")
+	if state.SelectedLog.SourceIndex != 0 {
+		t.Fatalf("expected selected sourceIndex 0, got %d", state.SelectedLog.SourceIndex)
+	}
+	if state.SelectedLog.Message != message {
+		t.Fatal("expected selected message to stay unchanged")
 	}
 }

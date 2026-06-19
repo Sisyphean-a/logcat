@@ -4,30 +4,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type LogEntry struct {
-	DeviceID  string
-	Timestamp time.Time
-	TimeText  string
-	PID       int
-	TID       int
-	Level     string
-	Tag       string
-	Source    string
-	Message   string
-	Raw       string
+	DeviceID string
+	TimeText string
+	PID      int
+	TID      int
+	Level    string
+	Tag      string
+	Source   string
+	Message  string
+	Raw      string
 }
 
 func ParseThreadtimeLine(deviceID, line string) (LogEntry, error) {
-	fields := strings.Fields(line)
-	if len(fields) < 6 {
+	timeText, pidText, tidText, level, rest, ok := splitThreadtimeFields(line)
+	if !ok {
 		return LogEntry{}, fmt.Errorf("invalid threadtime line: %s", line)
 	}
 
-	timeText := fields[0] + " " + fields[1]
-	rest := strings.TrimSpace(strings.Join(fields[5:], " "))
 	tag, messageText, ok := splitTagAndMessage(rest)
 	if !ok {
 		return LogEntry{}, fmt.Errorf("invalid threadtime line: %s", line)
@@ -35,17 +31,44 @@ func ParseThreadtimeLine(deviceID, line string) (LogEntry, error) {
 
 	message, source := parseChromiumConsoleMessage(messageText)
 	return LogEntry{
-		DeviceID:  deviceID,
-		Timestamp: parseTimestamp(timeText),
-		TimeText:  timeText,
-		PID:       mustAtoi(fields[2]),
-		TID:       mustAtoi(fields[3]),
-		Level:     fields[4],
-		Tag:       tag,
-		Source:    source,
-		Message:   message,
-		Raw:       line,
+		DeviceID: deviceID,
+		TimeText: timeText,
+		PID:      mustAtoi(pidText),
+		TID:      mustAtoi(tidText),
+		Level:    level,
+		Tag:      tag,
+		Source:   source,
+		Message:  message,
+		Raw:      line,
 	}, nil
+}
+
+func splitThreadtimeFields(line string) (string, string, string, string, string, bool) {
+	dateText, next, ok := nextField(line, 0)
+	if !ok {
+		return "", "", "", "", "", false
+	}
+	clockText, next, ok := nextField(line, next)
+	if !ok {
+		return "", "", "", "", "", false
+	}
+	pidText, next, ok := nextField(line, next)
+	if !ok {
+		return "", "", "", "", "", false
+	}
+	tidText, next, ok := nextField(line, next)
+	if !ok {
+		return "", "", "", "", "", false
+	}
+	level, next, ok := nextField(line, next)
+	if !ok {
+		return "", "", "", "", "", false
+	}
+	rest := normalizeThreadtimeRest(line[next:])
+	if rest == "" {
+		return "", "", "", "", "", false
+	}
+	return dateText + " " + clockText, pidText, tidText, level, rest, true
 }
 
 func splitTagAndMessage(value string) (string, string, bool) {
@@ -67,25 +90,15 @@ func mustAtoi(value string) int {
 	return number
 }
 
-func parseTimestamp(value string) time.Time {
-	year := time.Now().Year()
-	parsed, err := time.Parse("2006-01-02 15:04:05.000", fmt.Sprintf("%d-%s", year, value))
-	if err != nil {
-		return time.Time{}
-	}
-
-	return parsed
-}
-
 func parseChromiumConsoleMessage(value string) (string, string) {
 	const sourcePrefix = `", source: `
-	if !strings.Contains(value, sourcePrefix) {
+	end := strings.LastIndex(value, sourcePrefix)
+	if end == -1 {
 		return value, ""
 	}
 
-	start := strings.Index(value, `"`)
-	end := strings.LastIndex(value, sourcePrefix)
-	if start == -1 || end == -1 || end <= start {
+	start := strings.IndexByte(value, '"')
+	if start == -1 || end <= start {
 		return value, ""
 	}
 
@@ -99,4 +112,74 @@ func parseChromiumConsoleMessage(value string) (string, string) {
 	source = strings.TrimPrefix(source, "http://localhost/")
 	source = strings.TrimPrefix(source, "https://localhost/")
 	return message, source
+}
+
+func nextField(line string, start int) (string, int, bool) {
+	start = skipThreadtimeSpaces(line, start)
+	if start >= len(line) {
+		return "", start, false
+	}
+
+	end := start
+	for end < len(line) && !isThreadtimeSpace(line[end]) {
+		end++
+	}
+	return line[start:end], end, true
+}
+
+func skipThreadtimeSpaces(line string, start int) int {
+	for start < len(line) && isThreadtimeSpace(line[start]) {
+		start++
+	}
+	return start
+}
+
+func isThreadtimeSpace(char byte) bool {
+	switch char {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeThreadtimeRest(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if !needsSpaceNormalization(trimmed) {
+		return trimmed
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(trimmed))
+	spacePending := false
+	for index := 0; index < len(trimmed); index++ {
+		if isThreadtimeSpace(trimmed[index]) {
+			spacePending = true
+			continue
+		}
+		if spacePending && builder.Len() > 0 {
+			builder.WriteByte(' ')
+		}
+		spacePending = false
+		builder.WriteByte(trimmed[index])
+	}
+	return builder.String()
+}
+
+func needsSpaceNormalization(value string) bool {
+	spaceSeen := false
+	for index := 0; index < len(value); index++ {
+		if !isThreadtimeSpace(value[index]) {
+			spaceSeen = false
+			continue
+		}
+		if value[index] != ' ' || spaceSeen {
+			return true
+		}
+		spaceSeen = true
+	}
+	return false
 }
