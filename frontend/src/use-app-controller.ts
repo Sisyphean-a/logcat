@@ -69,6 +69,7 @@ export function useAppController() {
   const selectedLogRawRef = useRef("");
   const latestRevisionRef = useRef(state.revision);
   const latestSearchRequestRef = useRef(0);
+  const pendingSearchQueryRef = useRef<{ id: number; query: string } | null>(null);
   const selectedSourceIndexesRef = useRef<number[]>([]);
   const focusedSourceIndexRef = useRef(-1);
   const selectionTrackingRevisionRef = useRef(state.revision);
@@ -154,13 +155,29 @@ export function useAppController() {
   }
 
   function setLatestSearchState(query: string) {
+    const pending = pendingSearchQueryRef.current;
+    if (pending?.query === query) {
+      return Promise.resolve();
+    }
+    if (!pending && stateRef.current.search.query === query) {
+      return Promise.resolve();
+    }
     const requestID = latestSearchRequestRef.current + 1;
     latestSearchRequestRef.current = requestID;
+    pendingSearchQueryRef.current = { id: requestID, query };
     return SetSearchQuery(query).then((next: AppState) => {
-      if (requestID !== latestSearchRequestRef.current) {
+      const latest = pendingSearchQueryRef.current;
+      if (!latest || latest.id !== requestID) {
         return;
       }
+      pendingSearchQueryRef.current = null;
       applyNextState(next);
+    }).catch((error) => {
+      const latest = pendingSearchQueryRef.current;
+      if (latest?.id === requestID) {
+        pendingSearchQueryRef.current = null;
+      }
+      throw error;
     });
   }
 
