@@ -1,5 +1,7 @@
 package app
 
+import "github.com/xiakn/logcat/internal/adb"
+
 type UISnapshot struct {
 	Model        Model
 	Revision     uint64
@@ -22,7 +24,7 @@ func (c *Controller) UISnapshot(limit int) UISnapshot {
 func cloneUISnapshotModel(model Model, limit int) Model {
 	cloned := model
 	cloned.Devices = append([]DeviceItem(nil), model.Devices...)
-	cloned.Packages = append(cloned.Packages[:0], model.Packages...)
+	cloned.Packages = append([]adb.PackageInfo(nil), model.Packages...)
 	cloned.Processes = nil
 	cloned.SelectedProcess = ""
 	cloned.BoundPIDs = nil
