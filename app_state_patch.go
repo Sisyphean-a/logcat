@@ -14,11 +14,11 @@ type StateAppendPatch struct {
 	Dropped       int              `json:"dropped"`
 	Appended      []LogItemView    `json:"appended"`
 	SelectedCount int              `json:"selectedCount"`
-	SelectedLog   *SelectedLogView `json:"selectedLog"`
+	SelectedLog   *SelectedLogView `json:"selectedLog,omitempty"`
 }
 
 func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAppendPatch, bool) {
-	selectedLog, ok := appendPatchSelectedLog(prev, snapshot)
+	ok := sameAppendPatchSnapshotContext(prev, snapshot)
 	if !ok {
 		return StateAppendPatch{}, false
 	}
@@ -37,11 +37,10 @@ func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAp
 		Dropped:       dropped,
 		Appended:      appendedLogs,
 		SelectedCount: len(snapshot.Model.Selection.SourceIndexes),
-		SelectedLog:   selectedLog,
 	}, true
 }
 
-func appendPatchSelectedLog(prev AppState, snapshot appstate.UISnapshot) (*SelectedLogView, bool) {
+func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot) bool {
 	model := snapshot.Model
 	if prev.Status != model.Status ||
 		prev.ADBStatus != model.ADBStatus ||
@@ -55,10 +54,10 @@ func appendPatchSelectedLog(prev AppState, snapshot appstate.UISnapshot) (*Selec
 		prev.Filter.DefaultFilterID != model.Filter.DefaultFilterID ||
 		prev.Search.Query != model.Search.Query ||
 		prev.Pause.Active != model.Pause.Active {
-		return nil, false
+		return false
 	}
 	if prev.SelectedCount != len(model.Selection.SourceIndexes) {
-		return nil, false
+		return false
 	}
 
 	selectedLog := buildSnapshotSelectedLog(model.VisibleLogs, model.Selection)
@@ -66,14 +65,9 @@ func appendPatchSelectedLog(prev AppState, snapshot appstate.UISnapshot) (*Selec
 		!slices.EqualFunc(prev.Packages, model.Packages, samePackageInfoView) ||
 		!slices.EqualFunc(prev.Filter.Saved, model.Filter.Saved, sameSavedFilterItemView) ||
 		!sameSelectedLogView(prev.SelectedLog, selectedLog) {
-		return nil, false
+		return false
 	}
-	return selectedLog, true
-}
-
-func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot) bool {
-	_, ok := appendPatchSelectedLog(prev, snapshot)
-	return ok
+	return true
 }
 
 func sameDeviceItemView(left DeviceView, right appstate.DeviceItem) bool {

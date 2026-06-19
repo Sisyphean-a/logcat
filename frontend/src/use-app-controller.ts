@@ -166,7 +166,7 @@ export function useAppController() {
         next.totalLogs = patch.totalLogs;
         next.visibleCount = patch.visibleCount;
         next.selectedCount = patch.selectedCount;
-        next.selectedLog = patch.selectedLog;
+        next.selectedLog = patch.selectedLog ?? current.selectedLog;
         next.logs = mergeAppendedLogs(current.logs, patch.dropped, patch.appended);
         latestRevisionRef.current = patch.revision;
         return next;
