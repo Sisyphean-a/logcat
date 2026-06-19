@@ -35,8 +35,12 @@ const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
 
 export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: string[]; tokens: LogTextToken[] }) {
   const normalizedQueries = normalizeQueries(highlightTerms);
-  const ranges = getHighlightRanges(tokens, normalizedQueries);
-  const piecesByToken = getTokenPieces(tokens, ranges, normalizedQueries);
+  if (normalizedQueries.length === 0) {
+    return renderPlainTokenSpans(tokens);
+  }
+  const queryKey = normalizedQueries.join("\u0001");
+  const ranges = getHighlightRanges(tokens, normalizedQueries, queryKey);
+  const piecesByToken = getTokenPieces(tokens, ranges, queryKey);
   return tokens.map((token, index) => (
     <Fragment key={`${index}-${token.kind}-${token.start}-${token.end}`}>
       {(piecesByToken[index] ?? emptyTokenPieces).map((piece, pieceIndex) => (
@@ -51,6 +55,14 @@ export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: st
         <span className={buildTokenClassName(token.kind, false)}>{token.text}</span>
       ) : null}
     </Fragment>
+  ));
+}
+
+function renderPlainTokenSpans(tokens: LogTextToken[]) {
+  return tokens.map((token, index) => (
+    <span key={`${index}-${token.kind}-${token.start}-${token.end}`} className={buildTokenClassName(token.kind, false)}>
+      {token.text}
+    </span>
   ));
 }
 
@@ -152,13 +164,13 @@ function findNextToken(text: string, cursor: number) {
   return best;
 }
 
-function getHighlightRanges(tokens: LogTextToken[], normalizedQueries: string[]) {
+function getHighlightRanges(tokens: LogTextToken[], normalizedQueries: string[], queryKey: string) {
   if (normalizedQueries.length === 0) {
     return emptyHighlightRanges;
   }
 
   const text = tokenText(tokens);
-  const cacheKey = `${normalizedQueries.join("\u0001")}\u0000${text}`;
+  const cacheKey = `${queryKey}\u0000${text}`;
   const cached = highlightRangeCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -183,23 +195,18 @@ function getHighlightRanges(tokens: LogTextToken[], normalizedQueries: string[])
   return merged;
 }
 
-function getTokenPieces(tokens: LogTextToken[], ranges: HighlightRange[], normalizedQueries: string[]) {
-  if (normalizedQueries.length === 0) {
-    return tokens.map(() => emptyTokenPieces);
-  }
-
-  const cacheKey = normalizedQueries.join("\u0001");
+function getTokenPieces(tokens: LogTextToken[], ranges: HighlightRange[], queryKey: string) {
   const cacheByQuery = tokenPiecesCache.get(tokens);
-  const cached = cacheByQuery?.get(cacheKey);
+  const cached = cacheByQuery?.get(queryKey);
   if (cached) {
     return cached;
   }
 
   const pieces = tokens.map((token) => splitTokenByRanges(token, ranges));
   if (cacheByQuery) {
-    cacheByQuery.set(cacheKey, pieces);
+    cacheByQuery.set(queryKey, pieces);
   } else {
-    tokenPiecesCache.set(tokens, new Map([[cacheKey, pieces]]));
+    tokenPiecesCache.set(tokens, new Map([[queryKey, pieces]]));
   }
   return pieces;
 }
