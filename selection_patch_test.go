@@ -79,7 +79,7 @@ func TestApplySelectionPatch(t *testing.T) {
 		SelectedLog:           &SelectedLogView{SourceIndex: 3, TimeText: "t3", Level: "I", Tag: "tag", Message: "three", Source: "src"},
 	}
 
-	next := applySelectionPatch(state, patch)
+	next := applySelectionPatch(state, patch, []int{1}, 1)
 	if next.Revision != 8 || next.SelectedCount != 2 {
 		t.Fatalf("unexpected state summary: %+v", next)
 	}
@@ -94,5 +94,36 @@ func TestApplySelectionPatch(t *testing.T) {
 	}
 	if next.SelectedLog == nil || next.SelectedLog.SourceIndex != 3 {
 		t.Fatalf("unexpected selected log: %+v", next.SelectedLog)
+	}
+}
+
+func TestApplySelectionPatchClearsFocusedButUnchangedRows(t *testing.T) {
+	state := AppState{
+		Revision:      7,
+		SelectedCount: 2,
+		Logs: []LogItemView{
+			{SourceIndex: 1, TimeText: "t1", Level: "I", Tag: "tag", Message: "one", IsSelected: true},
+			{SourceIndex: 2, TimeText: "t2", Level: "I", Tag: "tag", Message: "two", IsFocused: true},
+			{SourceIndex: 3, TimeText: "t3", Level: "I", Tag: "tag", Message: "three", IsSelected: true},
+		},
+		SelectedLog: &SelectedLogView{SourceIndex: 2, TimeText: "t2", Level: "I", Tag: "tag", Message: "two", Source: "src"},
+	}
+	patch := SelectionPatch{
+		Revision:              8,
+		SelectedCount:         2,
+		FocusedSourceIndex:    3,
+		SelectedSourceIndexes: []int{1, 3},
+		SelectedLog:           &SelectedLogView{SourceIndex: 3, TimeText: "t3", Level: "I", Tag: "tag", Message: "three", Source: "src"},
+	}
+
+	next := applySelectionPatch(state, patch, []int{1, 3}, 2)
+	if next.Logs[0].IsFocused || !next.Logs[0].IsSelected {
+		t.Fatalf("expected first row selected only, got %+v", next.Logs[0])
+	}
+	if next.Logs[1].IsFocused || next.Logs[1].IsSelected {
+		t.Fatalf("expected second row cleared, got %+v", next.Logs[1])
+	}
+	if !next.Logs[2].IsFocused || !next.Logs[2].IsSelected {
+		t.Fatalf("expected third row focused and selected, got %+v", next.Logs[2])
 	}
 }

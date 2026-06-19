@@ -24,6 +24,9 @@ type App struct {
 	lastEmitRev        uint64
 	lastEmitState      AppState
 	hasEmitState       bool
+	lastSelectedSource []int
+	lastFocusedSource  int
+	selectionTrackRev  uint64
 	saveFilterState    func([]appstate.SavedFilter, []string, string) error
 	lastPersistedState persistedFilterState
 }
@@ -299,6 +302,7 @@ func (a *App) emitStateIfDirty() {
 	state := newAppState(snapshot)
 	a.lastEmitState = state
 	a.hasEmitState = true
+	a.updateSelectionTracking(state)
 	runtime.EventsEmit(a.ctx, stateEventName, state)
 }
 
@@ -310,6 +314,7 @@ func (a *App) emitAndSnapshot() AppState {
 	state := newAppState(snapshot)
 	a.lastEmitState = state
 	a.hasEmitState = true
+	a.updateSelectionTracking(state)
 	return state
 }
 
@@ -317,9 +322,37 @@ func (a *App) selectionPatchSnapshot() SelectionPatch {
 	snapshot := a.controller.SelectionSnapshot(uiLogWindowSize)
 	patch := buildSelectionPatchFromSnapshot(snapshot)
 	a.lastEmitRev = snapshot.Revision
-	a.lastEmitState = applySelectionPatch(a.lastEmitState, patch)
+	selection := a.resolveTrackedSelection()
+	a.lastEmitState = applySelectionPatch(
+		a.lastEmitState,
+		patch,
+		selection.selectedSourceIndexes,
+		selection.focusedSourceIndex,
+	)
 	a.hasEmitState = true
+	a.lastSelectedSource = append(a.lastSelectedSource[:0], patch.SelectedSourceIndexes...)
+	a.lastFocusedSource = patch.FocusedSourceIndex
+	a.selectionTrackRev = patch.Revision
 	return patch
+}
+
+func (a *App) updateSelectionTracking(state AppState) {
+	a.lastSelectedSource = collectSelectedSourceIndexes(state.Logs, state.SelectedCount)
+	a.lastFocusedSource = focusedSourceIndex(state.SelectedLog)
+	a.selectionTrackRev = state.Revision
+}
+
+func (a *App) resolveTrackedSelection() trackedSelectionState {
+	if a.selectionTrackRev == a.lastEmitState.Revision {
+		return trackedSelectionState{
+			selectedSourceIndexes: a.lastSelectedSource,
+			focusedSourceIndex:    a.lastFocusedSource,
+		}
+	}
+	return trackedSelectionState{
+		selectedSourceIndexes: collectSelectedSourceIndexes(a.lastEmitState.Logs, a.lastEmitState.SelectedCount),
+		focusedSourceIndex:    focusedSourceIndex(a.lastEmitState.SelectedLog),
+	}
 }
 
 func newStoppedTimer() *time.Timer {

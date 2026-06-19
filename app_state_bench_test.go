@@ -166,6 +166,26 @@ func BenchmarkBuildSelectionPatch(b *testing.B) {
 	}
 }
 
+func BenchmarkApplySelectionPatch(b *testing.B) {
+	state, patch := benchmarkSelectionPatchPair()
+
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = applySelectionPatch(state, patch, []int{999}, 999)
+		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = legacyApplySelectionPatch(state, patch)
+		}
+	})
+}
+
 func benchmarkUISnapshot() appstate.UISnapshot {
 	const total = 1000
 	logs := make([]appstate.LogViewItem, total)
@@ -262,6 +282,18 @@ func benchmarkSelectionSnapshot() appstate.SelectionSnapshot {
 		Focused:  &focused,
 		Revision: full.Revision + 1,
 	}
+}
+
+func benchmarkSelectionPatchPair() (AppState, SelectionPatch) {
+	state := newAppState(benchmarkUISnapshot())
+	snapshot := benchmarkUISnapshot()
+	snapshot.Revision++
+	snapshot.Model.Selection = appstate.SelectionState{
+		AnchorSourceIndex: 996,
+		FocusSourceIndex:  998,
+		SourceIndexes:     []int{996, 997, 998},
+	}
+	return state, buildSelectionPatch(snapshot)
 }
 
 func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
@@ -401,6 +433,30 @@ func legacyBuildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (S
 		SelectedCount: len(snapshot.Model.Selection.SourceIndexes),
 		SelectedLog:   legacyBuildSnapshotSelectedLog(snapshot.Model.VisibleLogs, snapshot.Model.Selection),
 	}, true
+}
+
+func legacyApplySelectionPatch(state AppState, patch SelectionPatch) AppState {
+	next := state
+	next.Revision = patch.Revision
+	next.SelectedCount = patch.SelectedCount
+	next.Logs = append([]LogItemView(nil), state.Logs...)
+	selected := patch.SelectedSourceIndexes
+	for index := range next.Logs {
+		sourceIndex := next.Logs[index].SourceIndex
+		next.Logs[index].IsFocused = sourceIndex == patch.FocusedSourceIndex
+		next.Logs[index].IsSelected = hasLinearInt(selected, sourceIndex)
+	}
+	next.SelectedLog = cloneSelectedLog(patch.SelectedLog)
+	return next
+}
+
+func hasLinearInt(items []int, target int) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func visibleLogSnapshots(items []appstate.LogViewItem) []appstate.VisibleLogSnapshot {
