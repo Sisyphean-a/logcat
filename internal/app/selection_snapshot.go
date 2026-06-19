@@ -25,12 +25,28 @@ func cloneFocusedLogItem(items []LogViewItem, focusedSourceIndex int) *LogViewIt
 	if focusedSourceIndex < 0 {
 		return nil
 	}
-	for index := range items {
-		if items[index].SourceIndex != focusedSourceIndex {
-			continue
-		}
-		item := items[index]
-		return &item
+	index := findFocusedLogItemIndex(items, focusedSourceIndex)
+	if index == -1 {
+		return nil
 	}
-	return nil
+	item := items[index]
+	return &item
+}
+
+func findFocusedLogItemIndex(items []LogViewItem, focusedSourceIndex int) int {
+	low := 0
+	high := len(items) - 1
+	for low <= high {
+		middle := low + (high-low)/2
+		current := items[middle].SourceIndex
+		switch {
+		case current == focusedSourceIndex:
+			return middle
+		case current < focusedSourceIndex:
+			low = middle + 1
+		default:
+			high = middle - 1
+		}
+	}
+	return -1
 }
