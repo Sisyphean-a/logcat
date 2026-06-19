@@ -143,14 +143,72 @@ func buildLogRows(
 	selection appstate.SelectionState,
 ) ([]LogItemView, *SelectedLogView) {
 	logs := make([]LogItemView, len(items))
-	cursor := newLogRowCursor(selection)
-
+	focusedSourceIndex := selection.FocusSourceIndex
+	selectedSourceIndexes := selection.SourceIndexes
 	var selectedLog *SelectedLogView
+	if len(selectedSourceIndexes) <= 1 {
+		selectedSourceIndex := -1
+		if len(selectedSourceIndexes) == 1 {
+			selectedSourceIndex = selectedSourceIndexes[0]
+		}
+		for offset, item := range items {
+			sourceIndex := item.SourceIndex
+			isFocused := sourceIndex == focusedSourceIndex
+			logs[offset] = LogItemView{
+				SourceIndex: sourceIndex,
+				TimeText:    item.Entry.TimeText,
+				Level:       item.Entry.Level,
+				Tag:         item.Entry.Tag,
+				Message:     item.Entry.Message,
+				IsFocused:   isFocused,
+				IsSelected:  sourceIndex == selectedSourceIndex,
+			}
+			if isFocused {
+				selectedLog = &SelectedLogView{
+					SourceIndex: sourceIndex,
+					TimeText:    item.Entry.TimeText,
+					Level:       item.Entry.Level,
+					Tag:         item.Entry.Tag,
+					Message:     item.Entry.Message,
+					Source:      item.Entry.Source,
+				}
+			}
+		}
+		return logs, selectedLog
+	}
+
+	selectedPos := 0
+	nextSelectedSource := selectedSourceIndexes[0]
 	for offset, item := range items {
-		row := cursor.Next(item)
-		logs[offset] = row
-		if row.IsFocused {
-			selectedLog = buildSelectedLogView(row, item.Entry.Source)
+		sourceIndex := item.SourceIndex
+		isFocused := sourceIndex == focusedSourceIndex
+		isSelected := sourceIndex == nextSelectedSource
+		if isSelected {
+			selectedPos++
+			if selectedPos < len(selectedSourceIndexes) {
+				nextSelectedSource = selectedSourceIndexes[selectedPos]
+			} else {
+				nextSelectedSource = -1
+			}
+		}
+		logs[offset] = LogItemView{
+			SourceIndex: sourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+			IsFocused:   isFocused,
+			IsSelected:  isSelected,
+		}
+		if isFocused {
+			selectedLog = &SelectedLogView{
+				SourceIndex: sourceIndex,
+				TimeText:    item.Entry.TimeText,
+				Level:       item.Entry.Level,
+				Tag:         item.Entry.Tag,
+				Message:     item.Entry.Message,
+				Source:      item.Entry.Source,
+			}
 		}
 	}
 	return logs, selectedLog
