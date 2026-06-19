@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -151,7 +152,9 @@ func (c *Controller) SelectLogWithMode(index int, mode SelectionMode) {
 	if index < 0 || index >= len(c.model.VisibleLogs) {
 		return
 	}
-	c.selectLogLocked(index, mode)
+	if !c.selectLogLocked(index, mode) {
+		return
+	}
 	c.markDirtyLocked()
 }
 
@@ -481,21 +484,24 @@ func (c *Controller) searchCacheActiveLocked() bool {
 	return !c.compiledSearch.matchAll()
 }
 
-func (c *Controller) selectLogLocked(index int, mode SelectionMode) {
+func (c *Controller) selectLogLocked(index int, mode SelectionMode) bool {
 	switch mode {
 	case SelectionModeAdd:
-		c.toggleSelectionLocked(index)
+		return c.toggleSelectionLocked(index)
 	case SelectionModeRange:
-		c.extendSelectionLocked(index)
+		return c.extendSelectionLocked(index)
 	default:
-		c.setSingleSelectionLocked(index)
+		return c.setSingleSelectionLocked(index)
 	}
 }
 
-func (c *Controller) toggleSelectionLocked(index int) {
+func (c *Controller) toggleSelectionLocked(index int) bool {
 	sourceIndex := c.model.VisibleLogs[index].SourceIndex
 	position := slicesIndex(c.model.Selection.SourceIndexes, sourceIndex)
 	if position >= 0 {
+		if len(c.model.Selection.SourceIndexes) == 1 && c.model.Selection.FocusSourceIndex == sourceIndex {
+			return false
+		}
 		c.model.Selection.SourceIndexes = append(
 			c.model.Selection.SourceIndexes[:position],
 			c.model.Selection.SourceIndexes[position+1:]...,
@@ -505,7 +511,7 @@ func (c *Controller) toggleSelectionLocked(index int) {
 		}
 		c.model.Selection.FocusSourceIndex = sourceIndex
 		c.rebuildSelectionFromSourceIndexesLocked()
-		return
+		return true
 	}
 
 	c.model.Selection.SourceIndexes = append(c.model.Selection.SourceIndexes, sourceIndex)
@@ -515,20 +521,19 @@ func (c *Controller) toggleSelectionLocked(index int) {
 	}
 	c.model.Selection.FocusSourceIndex = sourceIndex
 	c.model.SelectedIndex = index
+	return true
 }
 
-func (c *Controller) extendSelectionLocked(index int) {
+func (c *Controller) extendSelectionLocked(index int) bool {
 	sourceIndex := c.model.VisibleLogs[index].SourceIndex
 	anchorSourceIndex := c.model.Selection.FocusSourceIndex
 	if anchorSourceIndex < 0 {
-		c.setSingleSelectionLocked(index)
-		return
+		return c.setSingleSelectionLocked(index)
 	}
 
 	anchorIndex := c.findVisibleIndexBySourceLocked(anchorSourceIndex)
 	if anchorIndex == -1 {
-		c.setSingleSelectionLocked(index)
-		return
+		return c.setSingleSelectionLocked(index)
 	}
 
 	start := anchorIndex
@@ -540,17 +545,31 @@ func (c *Controller) extendSelectionLocked(index int) {
 	for current := start; current <= end; current++ {
 		selected = append(selected, c.model.VisibleLogs[current].SourceIndex)
 	}
+	if c.model.SelectedIndex == index &&
+		c.model.Selection.FocusSourceIndex == sourceIndex &&
+		slices.Equal(c.model.Selection.SourceIndexes, selected) {
+		return false
+	}
 	c.model.Selection.SourceIndexes = selected
 	c.model.Selection.FocusSourceIndex = sourceIndex
 	c.model.SelectedIndex = index
+	return true
 }
 
-func (c *Controller) setSingleSelectionLocked(index int) {
+func (c *Controller) setSingleSelectionLocked(index int) bool {
 	sourceIndex := c.model.VisibleLogs[index].SourceIndex
+	if c.model.SelectedIndex == index &&
+		c.model.Selection.AnchorSourceIndex == sourceIndex &&
+		c.model.Selection.FocusSourceIndex == sourceIndex &&
+		len(c.model.Selection.SourceIndexes) == 1 &&
+		c.model.Selection.SourceIndexes[0] == sourceIndex {
+		return false
+	}
 	c.model.SelectedIndex = index
 	c.model.Selection.AnchorSourceIndex = sourceIndex
 	c.model.Selection.FocusSourceIndex = sourceIndex
 	c.model.Selection.SourceIndexes = append(c.model.Selection.SourceIndexes[:0], sourceIndex)
+	return true
 }
 
 func (c *Controller) clearSelectionLocked() {

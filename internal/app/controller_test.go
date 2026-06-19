@@ -238,6 +238,23 @@ func TestControllerApplyOrFilterShowsTagOrMessageMatches(t *testing.T) {
 	}
 }
 
+func TestControllerSelectLogSameRowDoesNotDirtyRevision(t *testing.T) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.model.Pause.Active = false
+
+	for i := 0; i < 3; i++ {
+		controller.pushEntry(logcat.LogEntry{Message: fmt.Sprintf("line-%d", i)})
+	}
+
+	controller.SelectLog(1)
+	firstRevision := controller.revision
+
+	controller.SelectLog(1)
+	if controller.revision != firstRevision {
+		t.Fatalf("expected selecting same row to keep revision %d, got %d", firstRevision, controller.revision)
+	}
+}
+
 func TestControllerLoadADBMissingSetsExplicitStatus(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{
