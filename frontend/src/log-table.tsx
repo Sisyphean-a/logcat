@@ -1,4 +1,5 @@
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -194,6 +195,10 @@ export function LogTable({
       hasSelection: (row.isSelected ? selectedCountRef.current : 1) > 0,
     });
   }, [handleSelect]);
+  const visibleLogRows = useMemo(
+    () => buildVisibleLogRows(logs, start, end, handleSelect, handleContextMenu, resultSearch),
+    [end, handleContextMenu, handleSelect, logs, resultSearch, start],
+  );
 
   function closeContextMenu() {
     setContextMenu(null);
@@ -224,16 +229,7 @@ export function LogTable({
           <div className="placeholder">暂无日志</div>
         ) : (
           <div style={{ paddingTop: `${topSpacer}px`, paddingBottom: `${bottomSpacer}px` }}>
-            {logs.slice(start, end).map((log, offset) => (
-              <LogRow
-                key={log.sourceIndex}
-                log={log}
-                visibleIndex={start + offset}
-                onSelect={handleSelect}
-                onContextMenu={handleContextMenu}
-                resultSearch={resultSearch}
-              />
-            ))}
+            {visibleLogRows}
           </div>
         )}
       </div>
@@ -263,6 +259,31 @@ export function LogTable({
       , document.body) : null}
     </div>
   );
+}
+
+function buildVisibleLogRows(
+  logs: LogItemView[],
+  start: number,
+  end: number,
+  onSelect: (index: number, mode: LogSelectionMode) => void,
+  onContextMenu: (event: ReactMouseEvent<HTMLButtonElement>, row: LogItemView, visibleIndex: number) => void,
+  resultSearch: ResultSearchPreview,
+) {
+  const rows: ReactNode[] = new Array(end - start);
+  for (let index = start; index < end; index++) {
+    const log = logs[index];
+    rows[index - start] = (
+      <LogRow
+        key={log.sourceIndex}
+        log={log}
+        visibleIndex={index}
+        onSelect={onSelect}
+        onContextMenu={onContextMenu}
+        resultSearch={resultSearch}
+      />
+    );
+  }
+  return rows;
 }
 
 function clampContextMenuPosition(x: number, y: number, width: number, height: number): CSSProperties {
