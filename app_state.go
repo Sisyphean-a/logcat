@@ -112,7 +112,8 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		},
 	}
 
-	for index, device := range model.Devices {
+	for index := range model.Devices {
+		device := &model.Devices[index]
 		state.Devices[index] = DeviceView{
 			ID:     device.ID,
 			Model:  device.Model,
@@ -120,11 +121,13 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		}
 	}
 
-	for index, pkg := range model.Packages {
+	for index := range model.Packages {
+		pkg := &model.Packages[index]
 		state.Packages[index] = PackageView{Name: pkg.Name}
 	}
 
-	for index, filter := range model.Filter.Saved {
+	for index := range model.Filter.Saved {
+		filter := &model.Filter.Saved[index]
 		state.Filter.Saved[index] = SavedFilterView{
 			ID:          filter.ID,
 			Name:        filter.Name,
@@ -142,50 +145,59 @@ func buildLogRows(
 	items []appstate.LogViewItem,
 	selection appstate.SelectionState,
 ) ([]LogItemView, *SelectedLogView) {
-	logs := make([]LogItemView, len(items))
-	focusedSourceIndex := selection.FocusSourceIndex
-	selectedSourceIndexes := selection.SourceIndexes
-	var selectedLog *SelectedLogView
-	if len(selectedSourceIndexes) <= 1 {
-		selectedSourceIndex := -1
-		if len(selectedSourceIndexes) == 1 {
-			selectedSourceIndex = selectedSourceIndexes[0]
-		}
-		for offset, item := range items {
-			sourceIndex := item.SourceIndex
-			isFocused := sourceIndex == focusedSourceIndex
-			logs[offset] = LogItemView{
-				SourceIndex: sourceIndex,
-				TimeText:    item.Entry.TimeText,
-				Level:       item.Entry.Level,
-				Tag:         item.Entry.Tag,
-				Message:     item.Entry.Message,
-				IsFocused:   isFocused,
-				IsSelected:  sourceIndex == selectedSourceIndex,
-			}
-			if isFocused {
-				selectedLog = &SelectedLogView{
-					SourceIndex: sourceIndex,
-					TimeText:    item.Entry.TimeText,
-					Level:       item.Entry.Level,
-					Tag:         item.Entry.Tag,
-					Message:     item.Entry.Message,
-					Source:      item.Entry.Source,
-				}
-			}
-		}
-		return logs, selectedLog
+	if len(selection.SourceIndexes) <= 1 {
+		return buildLogRowsSingleSelection(items, selection.FocusSourceIndex, singleSelectedSourceIndex(selection.SourceIndexes))
 	}
+	return buildLogRowsMultiSelection(items, selection.FocusSourceIndex, selection.SourceIndexes)
+}
 
+func buildLogRowsSingleSelection(
+	items []appstate.LogViewItem,
+	focusedSourceIndex int,
+	selectedSourceIndex int,
+) ([]LogItemView, *SelectedLogView) {
+	logs := make([]LogItemView, len(items))
+	var selectedLog *SelectedLogView
+	for offset := range items {
+		item := &items[offset]
+		entry := &item.Entry
+		sourceIndex := item.SourceIndex
+		isFocused := sourceIndex == focusedSourceIndex
+		logs[offset] = LogItemView{
+			SourceIndex: sourceIndex,
+			TimeText:    entry.TimeText,
+			Level:       entry.Level,
+			Tag:         entry.Tag,
+			Message:     entry.Message,
+			IsFocused:   isFocused,
+			IsSelected:  sourceIndex == selectedSourceIndex,
+		}
+		if isFocused {
+			selectedLog = buildSelectedLogFromItem(item)
+		}
+	}
+	return logs, selectedLog
+}
+
+func buildLogRowsMultiSelection(
+	items []appstate.LogViewItem,
+	focusedSourceIndex int,
+	selectedSourceIndexes []int,
+) ([]LogItemView, *SelectedLogView) {
+	logs := make([]LogItemView, len(items))
+	var selectedLog *SelectedLogView
+	selectedCount := len(selectedSourceIndexes)
 	selectedPos := 0
 	nextSelectedSource := selectedSourceIndexes[0]
-	for offset, item := range items {
+	for offset := range items {
+		item := &items[offset]
+		entry := &item.Entry
 		sourceIndex := item.SourceIndex
 		isFocused := sourceIndex == focusedSourceIndex
 		isSelected := sourceIndex == nextSelectedSource
 		if isSelected {
 			selectedPos++
-			if selectedPos < len(selectedSourceIndexes) {
+			if selectedPos < selectedCount {
 				nextSelectedSource = selectedSourceIndexes[selectedPos]
 			} else {
 				nextSelectedSource = -1
@@ -193,25 +205,37 @@ func buildLogRows(
 		}
 		logs[offset] = LogItemView{
 			SourceIndex: sourceIndex,
-			TimeText:    item.Entry.TimeText,
-			Level:       item.Entry.Level,
-			Tag:         item.Entry.Tag,
-			Message:     item.Entry.Message,
+			TimeText:    entry.TimeText,
+			Level:       entry.Level,
+			Tag:         entry.Tag,
+			Message:     entry.Message,
 			IsFocused:   isFocused,
 			IsSelected:  isSelected,
 		}
 		if isFocused {
-			selectedLog = &SelectedLogView{
-				SourceIndex: sourceIndex,
-				TimeText:    item.Entry.TimeText,
-				Level:       item.Entry.Level,
-				Tag:         item.Entry.Tag,
-				Message:     item.Entry.Message,
-				Source:      item.Entry.Source,
-			}
+			selectedLog = buildSelectedLogFromItem(item)
 		}
 	}
 	return logs, selectedLog
+}
+
+func singleSelectedSourceIndex(sourceIndexes []int) int {
+	if len(sourceIndexes) == 1 {
+		return sourceIndexes[0]
+	}
+	return -1
+}
+
+func buildSelectedLogFromItem(item *appstate.LogViewItem) *SelectedLogView {
+	entry := &item.Entry
+	return &SelectedLogView{
+		SourceIndex: item.SourceIndex,
+		TimeText:    entry.TimeText,
+		Level:       entry.Level,
+		Tag:         entry.Tag,
+		Message:     entry.Message,
+		Source:      entry.Source,
+	}
 }
 
 type logRowCursor struct {
