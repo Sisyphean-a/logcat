@@ -753,13 +753,25 @@ function applySelectionRows(
     if (nextLogs === logs) {
       nextLogs = logs.slice();
     }
-    nextLogs[logIndex] = main.LogItemView.createFrom({
-      ...row,
-      isFocused,
-      isSelected,
-    });
+    nextLogs[logIndex] = cloneLogRowWithSelection(row, isFocused, isSelected);
   }
   return nextLogs;
+}
+
+function cloneLogRowWithSelection(
+  row: AppState["logs"][number],
+  isFocused: boolean,
+  isSelected: boolean,
+) {
+  return {
+    sourceIndex: row.sourceIndex,
+    timeText: row.timeText,
+    level: row.level,
+    tag: row.tag,
+    message: row.message,
+    isFocused,
+    isSelected,
+  } satisfies AppState["logs"][number];
 }
 
 function mergeAppendedLogs(
