@@ -34,8 +34,9 @@ const tokenPatterns: Array<{ kind: LogTokenKind; regex: RegExp }> = [
 ];
 
 export function TokenText({ highlightTerms = [], tokens }: { highlightTerms?: string[]; tokens: LogTextToken[] }) {
-  const ranges = getHighlightRanges(tokens, highlightTerms);
-  const piecesByToken = getTokenPieces(tokens, ranges, highlightTerms);
+  const normalizedQueries = normalizeQueries(highlightTerms);
+  const ranges = getHighlightRanges(tokens, normalizedQueries);
+  const piecesByToken = getTokenPieces(tokens, ranges, normalizedQueries);
   return tokens.map((token, index) => (
     <Fragment key={`${index}-${token.kind}-${token.start}-${token.end}`}>
       {(piecesByToken[index] ?? emptyTokenPieces).map((piece, pieceIndex) => (
@@ -151,8 +152,7 @@ function findNextToken(text: string, cursor: number) {
   return best;
 }
 
-function getHighlightRanges(tokens: LogTextToken[], queries: string[]) {
-  const normalizedQueries = normalizeQueries(queries);
+function getHighlightRanges(tokens: LogTextToken[], normalizedQueries: string[]) {
   if (normalizedQueries.length === 0) {
     return emptyHighlightRanges;
   }
@@ -183,8 +183,7 @@ function getHighlightRanges(tokens: LogTextToken[], queries: string[]) {
   return merged;
 }
 
-function getTokenPieces(tokens: LogTextToken[], ranges: HighlightRange[], queries: string[]) {
-  const normalizedQueries = normalizeQueries(queries);
+function getTokenPieces(tokens: LogTextToken[], ranges: HighlightRange[], normalizedQueries: string[]) {
   if (normalizedQueries.length === 0) {
     return tokens.map(() => emptyTokenPieces);
   }
