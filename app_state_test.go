@@ -12,6 +12,15 @@ func TestNewAppStateSelectedLogOmitsRawPayload(t *testing.T) {
 	message := "[H5] " + strings.Repeat("x", 5000)
 	raw := "06-10 20:41:45.478 1234 1234 I chromium: " + message
 	snapshot := appstate.UISnapshot{
+		VisibleLogs: visibleLogSnapshots([]appstate.LogViewItem{{
+			Entry: logcat.LogEntry{
+				TimeText: "06-10 20:41:45.478",
+				Level:    "I",
+				Tag:      "chromium",
+				Message:  message,
+				Raw:      raw,
+			},
+		}}),
 		Model: appstate.Model{
 			SelectedIndex: 0,
 			Selection: appstate.SelectionState{
@@ -19,15 +28,6 @@ func TestNewAppStateSelectedLogOmitsRawPayload(t *testing.T) {
 				FocusSourceIndex:  0,
 				SourceIndexes:     []int{0},
 			},
-			VisibleLogs: []appstate.LogViewItem{{
-				Entry: logcat.LogEntry{
-					TimeText: "06-10 20:41:45.478",
-					Level:    "I",
-					Tag:      "chromium",
-					Message:  message,
-					Raw:      raw,
-				},
-			}},
 		},
 		VisibleCount: 1,
 	}

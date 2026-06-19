@@ -119,7 +119,7 @@ func BenchmarkBuildSnapshotSelectedLog(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = buildSnapshotSelectedLog(snapshot.Model.VisibleLogs, selection)
+			_ = buildSnapshotSelectedLog(snapshot.VisibleLogs, selection)
 		}
 	})
 
@@ -184,7 +184,8 @@ func benchmarkUISnapshot() appstate.UISnapshot {
 	}
 
 	return appstate.UISnapshot{
-		Revision: 42,
+		Revision:    42,
+		VisibleLogs: visibleLogSnapshots(logs),
 		Model: appstate.Model{
 			Status:          "running",
 			ADBStatus:       "已连接",
@@ -237,6 +238,14 @@ func benchmarkAppendPatchPair() (AppState, appstate.UISnapshot) {
 			Raw:      "raw appended line",
 			Source:   "H5",
 		},
+	})
+	nextSnapshot.VisibleLogs = append(nextSnapshot.VisibleLogs, appstate.VisibleLogSnapshot{
+		SourceIndex: len(nextSnapshot.VisibleLogs),
+		TimeText:    "06-10 20:41:46.000",
+		Level:       "I",
+		Tag:         "tag-append",
+		Message:     "[H5] appended benchmark token",
+		Source:      "H5",
 	})
 	return prev, nextSnapshot
 }
@@ -330,11 +339,11 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 		if row.IsFocused {
 			state.SelectedLog = &SelectedLogView{
 				SourceIndex: row.SourceIndex,
-				TimeText: row.TimeText,
-				Level:    row.Level,
-				Tag:      row.Tag,
-				Message:  row.Message,
-				Source:   item.Entry.Source,
+				TimeText:    row.TimeText,
+				Level:       row.Level,
+				Tag:         row.Tag,
+				Message:     row.Message,
+				Source:      item.Entry.Source,
 			}
 		}
 	}
@@ -368,15 +377,16 @@ func legacyBuildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (S
 		return StateAppendPatch{}, false
 	}
 
-	dropped, appendedStart, ok := diffAppendSnapshotWindow(prev.Logs, snapshot.Model.VisibleLogs, snapshot.Model.Selection)
+	dropped, appendedStart, ok := diffAppendSnapshotWindow(prev.Logs, snapshot.VisibleLogs, snapshot.Model.Selection)
 	if !ok {
 		return StateAppendPatch{}, false
 	}
 
-	appendedLogs := make([]LogItemView, len(snapshot.Model.VisibleLogs)-appendedStart)
+	appendedLogs := make([]LogItemView, len(snapshot.VisibleLogs)-appendedStart)
 	cursor := newLogRowCursor(snapshot.Model.Selection)
-	for index := range snapshot.Model.VisibleLogs {
-		row := cursor.Next(snapshot.Model.VisibleLogs[index])
+	for index := range snapshot.VisibleLogs {
+		item := snapshot.VisibleLogs[index]
+		row := cursor.Next(item.SourceIndex, item.TimeText, item.Level, item.Tag, item.Message)
 		if index >= appendedStart {
 			appendedLogs[index-appendedStart] = row
 		}
@@ -391,4 +401,22 @@ func legacyBuildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (S
 		SelectedCount: len(snapshot.Model.Selection.SourceIndexes),
 		SelectedLog:   legacyBuildSnapshotSelectedLog(snapshot.Model.VisibleLogs, snapshot.Model.Selection),
 	}, true
+}
+
+func visibleLogSnapshots(items []appstate.LogViewItem) []appstate.VisibleLogSnapshot {
+	if len(items) == 0 {
+		return nil
+	}
+	snapshots := make([]appstate.VisibleLogSnapshot, len(items))
+	for index, item := range items {
+		snapshots[index] = appstate.VisibleLogSnapshot{
+			SourceIndex: item.SourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+			Source:      item.Entry.Source,
+		}
+	}
+	return snapshots
 }

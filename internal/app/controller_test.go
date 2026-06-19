@@ -718,8 +718,11 @@ func TestControllerUISnapshotWindowsLargeVisibleLogSet(t *testing.T) {
 	if snapshot.VisibleStart != 105 {
 		t.Fatalf("expected visible window start 105, got %d", snapshot.VisibleStart)
 	}
-	if len(snapshot.Model.VisibleLogs) != 1000 {
-		t.Fatalf("expected 1000 windowed logs, got %d", len(snapshot.Model.VisibleLogs))
+	if len(snapshot.VisibleLogs) != 1000 {
+		t.Fatalf("expected 1000 windowed logs, got %d", len(snapshot.VisibleLogs))
+	}
+	if len(snapshot.Model.VisibleLogs) != 0 {
+		t.Fatalf("expected snapshot model to omit visible logs, got %d", len(snapshot.Model.VisibleLogs))
 	}
 }
 

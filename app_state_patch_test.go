@@ -8,6 +8,13 @@ import (
 )
 
 func TestBuildStateAppendPatchAppendedRows(t *testing.T) {
+	logs := []appstate.LogViewItem{
+		logViewItem(1, "t1", "I", "tag", "one"),
+		logViewItem(2, "t2", "I", "tag", "two"),
+		logViewItem(3, "t3", "I", "tag", "three"),
+		logViewItem(4, "t4", "W", "tag", "four"),
+		logViewItem(5, "t5", "E", "tag", "five"),
+	}
 	prev := AppState{
 		Revision:     10,
 		TotalLogs:    3,
@@ -21,15 +28,9 @@ func TestBuildStateAppendPatchAppendedRows(t *testing.T) {
 	current := appstate.UISnapshot{
 		Revision:     11,
 		VisibleCount: 5,
+		VisibleLogs:  visibleLogSnapshots(logs),
 		Model: appstate.Model{
 			TotalLogs: 5,
-			VisibleLogs: []appstate.LogViewItem{
-				logViewItem(1, "t1", "I", "tag", "one"),
-				logViewItem(2, "t2", "I", "tag", "two"),
-				logViewItem(3, "t3", "I", "tag", "three"),
-				logViewItem(4, "t4", "W", "tag", "four"),
-				logViewItem(5, "t5", "E", "tag", "five"),
-			},
 		},
 	}
 
@@ -49,6 +50,11 @@ func TestBuildStateAppendPatchAppendedRows(t *testing.T) {
 }
 
 func TestBuildStateAppendPatchSlidingWindow(t *testing.T) {
+	logs := []appstate.LogViewItem{
+		logViewItem(8, "t8", "I", "tag", "eight"),
+		logViewItem(9, "t9", "I", "tag", "nine"),
+		logViewItem(10, "t10", "I", "tag", "ten"),
+	}
 	prev := AppState{
 		Revision:     20,
 		TotalLogs:    1000,
@@ -62,13 +68,9 @@ func TestBuildStateAppendPatchSlidingWindow(t *testing.T) {
 	current := appstate.UISnapshot{
 		Revision:     21,
 		VisibleCount: 3,
+		VisibleLogs:  visibleLogSnapshots(logs),
 		Model: appstate.Model{
 			TotalLogs: 1001,
-			VisibleLogs: []appstate.LogViewItem{
-				logViewItem(8, "t8", "I", "tag", "eight"),
-				logViewItem(9, "t9", "I", "tag", "nine"),
-				logViewItem(10, "t10", "I", "tag", "ten"),
-			},
 		},
 	}
 
@@ -85,6 +87,11 @@ func TestBuildStateAppendPatchSlidingWindow(t *testing.T) {
 }
 
 func TestBuildStateAppendPatchRejectsSelectionChange(t *testing.T) {
+	logs := []appstate.LogViewItem{
+		logViewItem(1, "t1", "I", "tag", "one"),
+		logViewItem(2, "t2", "I", "tag", "two"),
+		logViewItem(3, "t3", "I", "tag", "three"),
+	}
 	prev := AppState{
 		Revision:      30,
 		TotalLogs:     2,
@@ -98,13 +105,9 @@ func TestBuildStateAppendPatchRejectsSelectionChange(t *testing.T) {
 	current := appstate.UISnapshot{
 		Revision:     31,
 		VisibleCount: 3,
+		VisibleLogs:  visibleLogSnapshots(logs),
 		Model: appstate.Model{
 			TotalLogs: 3,
-			VisibleLogs: []appstate.LogViewItem{
-				logViewItem(1, "t1", "I", "tag", "one"),
-				logViewItem(2, "t2", "I", "tag", "two"),
-				logViewItem(3, "t3", "I", "tag", "three"),
-			},
 			Selection: appstate.SelectionState{
 				AnchorSourceIndex: 2,
 				FocusSourceIndex:  2,
@@ -147,6 +150,34 @@ func TestApplyAppendPatch(t *testing.T) {
 	}
 	if len(next.Logs) != 3 || next.Logs[0].SourceIndex != 2 || next.Logs[2].SourceIndex != 4 {
 		t.Fatalf("unexpected logs after patch: %+v", next.Logs)
+	}
+}
+
+func TestApplyAppendPatchKeepsSelectedLogWhenPatchOmitsIt(t *testing.T) {
+	prev := AppState{
+		Revision:      10,
+		TotalLogs:     3,
+		VisibleCount:  3,
+		SelectedCount: 1,
+		Logs: []LogItemView{
+			{SourceIndex: 1, TimeText: "t1", Level: "I", Tag: "tag", Message: "one"},
+			{SourceIndex: 2, TimeText: "t2", Level: "I", Tag: "tag", Message: "two", IsFocused: true, IsSelected: true},
+			{SourceIndex: 3, TimeText: "t3", Level: "I", Tag: "tag", Message: "three"},
+		},
+		SelectedLog: &SelectedLogView{SourceIndex: 2, TimeText: "t2", Level: "I", Tag: "tag", Message: "two", Source: "src"},
+	}
+	patch := StateAppendPatch{
+		Revision:      11,
+		TotalLogs:     4,
+		VisibleCount:  3,
+		Dropped:       1,
+		Appended:      []LogItemView{{SourceIndex: 4, TimeText: "t4", Level: "I", Tag: "tag", Message: "four"}},
+		SelectedCount: 1,
+	}
+
+	next := applyAppendPatch(prev, patch)
+	if next.SelectedLog == nil || next.SelectedLog.SourceIndex != 2 {
+		t.Fatalf("expected selected log preserved, got %+v", next.SelectedLog)
 	}
 }
 

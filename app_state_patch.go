@@ -23,12 +23,12 @@ func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAp
 		return StateAppendPatch{}, false
 	}
 
-	dropped, appendedStart, ok := diffAppendSnapshotWindow(prev.Logs, snapshot.Model.VisibleLogs, snapshot.Model.Selection)
+	dropped, appendedStart, ok := diffAppendSnapshotWindow(prev.Logs, snapshot.VisibleLogs, snapshot.Model.Selection)
 	if !ok {
 		return StateAppendPatch{}, false
 	}
 
-	appendedLogs := buildAppendedLogRows(snapshot.Model.VisibleLogs[appendedStart:])
+	appendedLogs := buildAppendedLogRows(snapshot.VisibleLogs[appendedStart:])
 
 	return StateAppendPatch{
 		Revision:      snapshot.Revision,
@@ -60,7 +60,7 @@ func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot)
 		return false
 	}
 
-	selectedLog := buildSnapshotSelectedLog(model.VisibleLogs, model.Selection)
+	selectedLog := buildSnapshotSelectedLog(snapshot.VisibleLogs, model.Selection)
 	if !slices.EqualFunc(prev.Devices, model.Devices, sameDeviceItemView) ||
 		!slices.EqualFunc(prev.Packages, model.Packages, samePackageInfoView) ||
 		!slices.EqualFunc(prev.Filter.Saved, model.Filter.Saved, sameSavedFilterItemView) ||
@@ -87,7 +87,7 @@ func sameSavedFilterItemView(left SavedFilterView, right appstate.SavedFilter) b
 
 func diffAppendSnapshotWindow(
 	prev []LogItemView,
-	current []appstate.LogViewItem,
+	current []appstate.VisibleLogSnapshot,
 	selection appstate.SelectionState,
 ) (int, int, bool) {
 	prevMax := -1
@@ -110,7 +110,8 @@ func diffAppendSnapshotWindow(
 
 	cursor := newLogRowCursor(selection)
 	for index := 0; index < overlap; index++ {
-		row := cursor.Next(current[index])
+		item := current[index]
+		row := cursor.Next(item.SourceIndex, item.TimeText, item.Level, item.Tag, item.Message)
 		if prev[dropped+index] != row {
 			return 0, 0, false
 		}
@@ -119,7 +120,7 @@ func diffAppendSnapshotWindow(
 	return dropped, appendedStart, true
 }
 
-func buildAppendedLogRows(items []appstate.LogViewItem) []LogItemView {
+func buildAppendedLogRows(items []appstate.VisibleLogSnapshot) []LogItemView {
 	if len(items) == 0 {
 		return nil
 	}
@@ -129,16 +130,16 @@ func buildAppendedLogRows(items []appstate.LogViewItem) []LogItemView {
 	for index, item := range items {
 		rows[index] = LogItemView{
 			SourceIndex: item.SourceIndex,
-			TimeText:    item.Entry.TimeText,
-			Level:       item.Entry.Level,
-			Tag:         item.Entry.Tag,
-			Message:     item.Entry.Message,
+			TimeText:    item.TimeText,
+			Level:       item.Level,
+			Tag:         item.Tag,
+			Message:     item.Message,
 		}
 	}
 	return rows
 }
 
-func findFirstSourceIndexAfter(items []appstate.LogViewItem, sourceIndex int) int {
+func findFirstSourceIndexAfter(items []appstate.VisibleLogSnapshot, sourceIndex int) int {
 	low := 0
 	high := len(items)
 	for low < high {
@@ -167,7 +168,7 @@ func sameSelectedLogView(left *SelectedLogView, right *SelectedLogView) bool {
 	return *left == *right
 }
 
-func buildSnapshotSelectedLog(items []appstate.LogViewItem, selection appstate.SelectionState) *SelectedLogView {
+func buildSnapshotSelectedLog(items []appstate.VisibleLogSnapshot, selection appstate.SelectionState) *SelectedLogView {
 	if selection.FocusSourceIndex < 0 {
 		return nil
 	}
@@ -177,16 +178,16 @@ func buildSnapshotSelectedLog(items []appstate.LogViewItem, selection appstate.S
 	}
 	row := LogItemView{
 		SourceIndex: item.SourceIndex,
-		TimeText:    item.Entry.TimeText,
-		Level:       item.Entry.Level,
-		Tag:         item.Entry.Tag,
-		Message:     item.Entry.Message,
+		TimeText:    item.TimeText,
+		Level:       item.Level,
+		Tag:         item.Tag,
+		Message:     item.Message,
 		IsFocused:   true,
 	}
-	return buildSelectedLogView(row, item.Entry.Source)
+	return buildSelectedLogView(row, item.Source)
 }
 
-func findLogViewItemBySourceIndex(items []appstate.LogViewItem, sourceIndex int) (appstate.LogViewItem, bool) {
+func findLogViewItemBySourceIndex(items []appstate.VisibleLogSnapshot, sourceIndex int) (appstate.VisibleLogSnapshot, bool) {
 	low := 0
 	high := len(items) - 1
 	for low <= high {
@@ -201,7 +202,7 @@ func findLogViewItemBySourceIndex(items []appstate.LogViewItem, sourceIndex int)
 			high = middle - 1
 		}
 	}
-	return appstate.LogViewItem{}, false
+	return appstate.VisibleLogSnapshot{}, false
 }
 
 func applyAppendPatch(state AppState, patch StateAppendPatch) AppState {
@@ -211,6 +212,10 @@ func applyAppendPatch(state AppState, patch StateAppendPatch) AppState {
 	next.VisibleCount = patch.VisibleCount
 	next.SelectedCount = patch.SelectedCount
 	next.Logs = mergePatchedLogs(state.Logs, patch.Dropped, patch.Appended)
+	if patch.SelectedLog == nil {
+		next.SelectedLog = state.SelectedLog
+		return next
+	}
 	if sameSelectedLogView(state.SelectedLog, patch.SelectedLog) {
 		next.SelectedLog = state.SelectedLog
 		return next

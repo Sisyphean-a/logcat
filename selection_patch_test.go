@@ -7,15 +7,16 @@ import (
 )
 
 func TestBuildSelectionPatch(t *testing.T) {
+	logs := []appstate.LogViewItem{
+		logViewItem(1, "t1", "I", "tag", "one"),
+		logViewItem(2, "t2", "W", "tag", "two"),
+		logViewItem(3, "t3", "E", "tag", "three"),
+	}
 	snapshot := appstate.UISnapshot{
 		Revision:     9,
 		VisibleCount: 3,
+		VisibleLogs:  visibleLogSnapshots(logs),
 		Model: appstate.Model{
-			VisibleLogs: []appstate.LogViewItem{
-				logViewItem(1, "t1", "I", "tag", "one"),
-				logViewItem(2, "t2", "W", "tag", "two"),
-				logViewItem(3, "t3", "E", "tag", "three"),
-			},
 			Selection: appstate.SelectionState{
 				AnchorSourceIndex: 2,
 				FocusSourceIndex:  2,

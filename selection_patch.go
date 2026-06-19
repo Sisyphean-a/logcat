@@ -7,11 +7,11 @@ import (
 )
 
 type SelectionPatch struct {
-	Revision             uint64           `json:"revision"`
-	SelectedCount        int              `json:"selectedCount"`
-	FocusedSourceIndex   int              `json:"focusedSourceIndex"`
-	SelectedSourceIndexes []int           `json:"selectedSourceIndexes"`
-	SelectedLog          *SelectedLogView `json:"selectedLog"`
+	Revision              uint64           `json:"revision"`
+	SelectedCount         int              `json:"selectedCount"`
+	FocusedSourceIndex    int              `json:"focusedSourceIndex"`
+	SelectedSourceIndexes []int            `json:"selectedSourceIndexes"`
+	SelectedLog           *SelectedLogView `json:"selectedLog"`
 }
 
 func buildSelectionPatch(snapshot appstate.UISnapshot) SelectionPatch {
@@ -21,7 +21,7 @@ func buildSelectionPatch(snapshot appstate.UISnapshot) SelectionPatch {
 		SelectedCount:         len(selected),
 		FocusedSourceIndex:    snapshot.Model.Selection.FocusSourceIndex,
 		SelectedSourceIndexes: selected,
-		SelectedLog:           buildSnapshotSelectedLog(snapshot.Model.VisibleLogs, snapshot.Model.Selection),
+		SelectedLog:           buildSnapshotSelectedLog(snapshot.VisibleLogs, snapshot.Model.Selection),
 	}
 }
 

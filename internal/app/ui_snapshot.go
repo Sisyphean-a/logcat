@@ -4,20 +4,32 @@ import "github.com/xiakn/logcat/internal/adb"
 
 type UISnapshot struct {
 	Model        Model
+	VisibleLogs  []VisibleLogSnapshot
 	Revision     uint64
 	VisibleCount int
 	VisibleStart int
+}
+
+type VisibleLogSnapshot struct {
+	SourceIndex int
+	TimeText    string
+	Level       string
+	Tag         string
+	Message     string
+	Source      string
 }
 
 func (c *Controller) UISnapshot(limit int) UISnapshot {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	visibleStart := visibleWindowStart(len(c.model.VisibleLogs), limit)
 	return UISnapshot{
 		Model:        cloneUISnapshotModel(c.model, limit),
+		VisibleLogs:  cloneVisibleLogSnapshots(c.model.VisibleLogs[visibleStart:]),
 		Revision:     c.revision,
 		VisibleCount: len(c.model.VisibleLogs),
-		VisibleStart: visibleWindowStart(len(c.model.VisibleLogs), limit),
+		VisibleStart: visibleStart,
 	}
 }
 
@@ -30,7 +42,7 @@ func cloneUISnapshotModel(model Model, limit int) Model {
 	cloned.BoundPIDs = nil
 	cloned.Filter = cloneUISnapshotFilterState(model.Filter)
 	cloned.Search = SearchState{Query: model.Search.Query}
-	cloned.VisibleLogs = append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...)
+	cloned.VisibleLogs = nil
 	cloned.Selection.SourceIndexes = append([]int(nil), model.Selection.SourceIndexes...)
 	return cloned
 }
@@ -52,4 +64,24 @@ func visibleWindowStart(size int, limit int) int {
 		return 0
 	}
 	return size - limit
+}
+
+func cloneVisibleLogSnapshots(items []LogViewItem) []VisibleLogSnapshot {
+	if len(items) == 0 {
+		return nil
+	}
+	snapshots := make([]VisibleLogSnapshot, len(items))
+	for index := range items {
+		item := &items[index]
+		entry := &item.Entry
+		snapshots[index] = VisibleLogSnapshot{
+			SourceIndex: item.SourceIndex,
+			TimeText:    entry.TimeText,
+			Level:       entry.Level,
+			Tag:         entry.Tag,
+			Message:     entry.Message,
+			Source:      entry.Source,
+		}
+	}
+	return snapshots
 }
