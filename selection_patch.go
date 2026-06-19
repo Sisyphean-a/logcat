@@ -199,17 +199,17 @@ func cloneLogItemViewWithSelection(row LogItemView, isFocused bool, isSelected b
 	}
 }
 
-func buildFocusedSelectedLog(item *appstate.LogViewItem, focusedSourceIndex int) *SelectedLogView {
+func buildFocusedSelectedLog(item *appstate.FocusedLogSnapshot, focusedSourceIndex int) *SelectedLogView {
 	if item == nil || item.SourceIndex != focusedSourceIndex {
 		return nil
 	}
 	row := LogItemView{
 		SourceIndex: item.SourceIndex,
-		TimeText:    item.Entry.TimeText,
-		Level:       item.Entry.Level,
-		Tag:         item.Entry.Tag,
-		Message:     item.Entry.Message,
+		TimeText:    item.TimeText,
+		Level:       item.Level,
+		Tag:         item.Tag,
+		Message:     item.Message,
 		IsFocused:   true,
 	}
-	return buildSelectedLogView(row, item.Entry.Source)
+	return buildSelectedLogView(row, item.Source)
 }

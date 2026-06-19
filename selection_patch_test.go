@@ -45,9 +45,15 @@ func TestBuildSelectionPatchFromSelectionSnapshot(t *testing.T) {
 			FocusSourceIndex:  2,
 			SourceIndexes:     []int{2},
 		},
-		Focused: func() *appstate.LogViewItem {
-			item := logViewItem(2, "t2", "W", "tag", "two")
-			return &item
+		Focused: func() *appstate.FocusedLogSnapshot {
+			return &appstate.FocusedLogSnapshot{
+				SourceIndex: 2,
+				TimeText:    "t2",
+				Level:       "W",
+				Tag:         "tag",
+				Message:     "two",
+				Source:      "src",
+			}
 		}(),
 	}
 

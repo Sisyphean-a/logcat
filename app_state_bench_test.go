@@ -271,16 +271,21 @@ func benchmarkAppendPatchPair() (AppState, appstate.UISnapshot) {
 }
 
 func benchmarkSelectionSnapshot() appstate.SelectionSnapshot {
-	full := benchmarkUISnapshot()
-	focused := full.Model.VisibleLogs[998]
 	return appstate.SelectionSnapshot{
 		Selection: appstate.SelectionState{
 			AnchorSourceIndex: 996,
 			FocusSourceIndex:  998,
 			SourceIndexes:     []int{996, 997, 998},
 		},
-		Focused:  &focused,
-		Revision: full.Revision + 1,
+		Focused: &appstate.FocusedLogSnapshot{
+			SourceIndex: 998,
+			TimeText:    "06-10 20:41:45.478",
+			Level:       "I",
+			Tag:         "tag-8",
+			Message:     "[H5] benchmark message 998 token",
+			Source:      "H5",
+		},
+		Revision: 43,
 	}
 }
 

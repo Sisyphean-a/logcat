@@ -2,8 +2,17 @@ package app
 
 type SelectionSnapshot struct {
 	Selection SelectionState
-	Focused   *LogViewItem
+	Focused   *FocusedLogSnapshot
 	Revision  uint64
+}
+
+type FocusedLogSnapshot struct {
+	SourceIndex int
+	TimeText    string
+	Level       string
+	Tag         string
+	Message     string
+	Source      string
 }
 
 func (c *Controller) SelectionSnapshot(limit int) SelectionSnapshot {
@@ -21,7 +30,7 @@ func (c *Controller) SelectionSnapshot(limit int) SelectionSnapshot {
 	}
 }
 
-func cloneFocusedLogItem(items []LogViewItem, focusedSourceIndex int) *LogViewItem {
+func cloneFocusedLogItem(items []LogViewItem, focusedSourceIndex int) *FocusedLogSnapshot {
 	if focusedSourceIndex < 0 {
 		return nil
 	}
@@ -30,7 +39,14 @@ func cloneFocusedLogItem(items []LogViewItem, focusedSourceIndex int) *LogViewIt
 		return nil
 	}
 	item := items[index]
-	return &item
+	return &FocusedLogSnapshot{
+		SourceIndex: item.SourceIndex,
+		TimeText:    item.Entry.TimeText,
+		Level:       item.Entry.Level,
+		Tag:         item.Entry.Tag,
+		Message:     item.Entry.Message,
+		Source:      item.Entry.Source,
+	}
 }
 
 func findFocusedLogItemIndex(items []LogViewItem, focusedSourceIndex int) int {
