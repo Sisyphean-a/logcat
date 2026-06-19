@@ -281,7 +281,7 @@ func FormatLogDisplay(entry logcat.LogEntry) string {
 }
 
 func (c *Controller) rebuildVisibleFromAllLogsLocked() {
-	selectedSourceIndexes := append([]int(nil), c.model.Selection.SourceIndexes...)
+	selectedSourceIndexes := c.cloneSelectionSourceIndexesLocked()
 	focusSourceIndex := c.model.Selection.FocusSourceIndex
 	anchorSourceIndex := c.model.Selection.AnchorSourceIndex
 	searchActive := !c.compiledSearch.matchAll()
@@ -307,6 +307,21 @@ func (c *Controller) rebuildVisibleFromAllLogsLocked() {
 	c.restoreSelectionLocked(selectedSourceIndexes, focusSourceIndex, anchorSourceIndex)
 	c.recomputeSearchLocked()
 	c.markDirtyLocked()
+}
+
+func (c *Controller) cloneSelectionSourceIndexesLocked() []int {
+	count := len(c.model.Selection.SourceIndexes)
+	if count == 0 {
+		c.selectionScratch = c.selectionScratch[:0]
+		return nil
+	}
+	if cap(c.selectionScratch) < count {
+		c.selectionScratch = make([]int, count)
+	} else {
+		c.selectionScratch = c.selectionScratch[:count]
+	}
+	copy(c.selectionScratch, c.model.Selection.SourceIndexes)
+	return c.selectionScratch
 }
 
 func (c *Controller) prepareVisibleLogsBufferLocked() {

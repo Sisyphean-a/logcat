@@ -50,6 +50,7 @@ type Controller struct {
 	resumeStreaming      bool
 	compiledFilter       compiledFilterQuery
 	compiledSearch       compiledSearchQuery
+	selectionScratch     []int
 }
 
 const defaultBindingPollInterval = 500 * time.Millisecond
