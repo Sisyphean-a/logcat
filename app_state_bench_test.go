@@ -206,13 +206,14 @@ func benchmarkAppendPatchPair() (AppState, appstate.UISnapshot) {
 
 func benchmarkSelectionSnapshot() appstate.SelectionSnapshot {
 	full := benchmarkUISnapshot()
+	focused := full.Model.VisibleLogs[998]
 	return appstate.SelectionSnapshot{
-		VisibleLogs: full.Model.VisibleLogs,
 		Selection: appstate.SelectionState{
 			AnchorSourceIndex: 996,
 			FocusSourceIndex:  998,
 			SourceIndexes:     []int{996, 997, 998},
 		},
+		Focused:  &focused,
 		Revision: full.Revision + 1,
 	}
 }

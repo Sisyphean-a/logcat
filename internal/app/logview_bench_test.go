@@ -72,3 +72,53 @@ func BenchmarkAppendLogNoSearch(b *testing.B) {
 		controller.appendLogLocked(entry)
 	}
 }
+
+func BenchmarkSelectionSnapshot(b *testing.B) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	for i := 0; i < 2000; i++ {
+		controller.model.VisibleLogs = append(controller.model.VisibleLogs, LogViewItem{
+			SourceIndex: i,
+			Entry: logcat.LogEntry{
+				TimeText: "06-04 16:42:18.479",
+				Level:    "I",
+				Tag:      "chromium",
+				Message:  fmt.Sprintf("[H5] message body number %d token", i),
+				Raw:      "raw",
+				Source:   "H5",
+			},
+		})
+	}
+	controller.model.Selection = SelectionState{
+		AnchorSourceIndex: 1997,
+		FocusSourceIndex:  1998,
+		SourceIndexes:     []int{1997, 1998, 1999},
+	}
+
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = controller.SelectionSnapshot(1000)
+		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = legacySelectionSnapshot(controller.model, controller.revision, 1000)
+		}
+	})
+}
+
+func legacySelectionSnapshot(model Model, revision uint64, limit int) SelectionSnapshot {
+	return SelectionSnapshot{
+		Selection: SelectionState{
+			AnchorSourceIndex: model.Selection.AnchorSourceIndex,
+			FocusSourceIndex:  model.Selection.FocusSourceIndex,
+			SourceIndexes:     append([]int(nil), model.Selection.SourceIndexes...),
+		},
+		Focused:  cloneFocusedLogItem(append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...), model.Selection.FocusSourceIndex),
+		Revision: revision,
+	}
+}

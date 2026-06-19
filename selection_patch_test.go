@@ -39,15 +39,15 @@ func TestBuildSelectionPatch(t *testing.T) {
 func TestBuildSelectionPatchFromSelectionSnapshot(t *testing.T) {
 	snapshot := appstate.SelectionSnapshot{
 		Revision: 12,
-		VisibleLogs: []appstate.LogViewItem{
-			logViewItem(1, "t1", "I", "tag", "one"),
-			logViewItem(2, "t2", "W", "tag", "two"),
-		},
 		Selection: appstate.SelectionState{
 			AnchorSourceIndex: 2,
 			FocusSourceIndex:  2,
 			SourceIndexes:     []int{2},
 		},
+		Focused: func() *appstate.LogViewItem {
+			item := logViewItem(2, "t2", "W", "tag", "two")
+			return &item
+		}(),
 	}
 
 	patch := buildSelectionPatchFromSnapshot(snapshot)

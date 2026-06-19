@@ -32,7 +32,7 @@ func buildSelectionPatchFromSnapshot(snapshot appstate.SelectionSnapshot) Select
 		SelectedCount:         len(selected),
 		FocusedSourceIndex:    snapshot.Selection.FocusSourceIndex,
 		SelectedSourceIndexes: selected,
-		SelectedLog:           buildSnapshotSelectedLog(snapshot.VisibleLogs, snapshot.Selection),
+		SelectedLog:           buildFocusedSelectedLog(snapshot.Focused, snapshot.Selection.FocusSourceIndex),
 	}
 }
 
@@ -49,4 +49,19 @@ func applySelectionPatch(state AppState, patch SelectionPatch) AppState {
 	}
 	next.SelectedLog = cloneSelectedLog(patch.SelectedLog)
 	return next
+}
+
+func buildFocusedSelectedLog(item *appstate.LogViewItem, focusedSourceIndex int) *SelectedLogView {
+	if item == nil || item.SourceIndex != focusedSourceIndex {
+		return nil
+	}
+	row := LogItemView{
+		SourceIndex: item.SourceIndex,
+		TimeText:    item.Entry.TimeText,
+		Level:       item.Entry.Level,
+		Tag:         item.Entry.Tag,
+		Message:     item.Entry.Message,
+		IsFocused:   true,
+	}
+	return buildSelectedLogView(row, item.Entry.Source)
 }
