@@ -625,19 +625,19 @@ func (c *Controller) rebuildSelectionFromSourceIndexesLocked() {
 }
 
 func (c *Controller) findVisibleIndexBySourceLocked(sourceIndex int) int {
-	for index, item := range c.model.VisibleLogs {
-		if item.SourceIndex == sourceIndex {
-			return index
-		}
+	index := sort.Search(len(c.model.VisibleLogs), func(index int) bool {
+		return c.model.VisibleLogs[index].SourceIndex >= sourceIndex
+	})
+	if index < len(c.model.VisibleLogs) && c.model.VisibleLogs[index].SourceIndex == sourceIndex {
+		return index
 	}
 	return -1
 }
 
 func slicesIndex(items []int, target int) int {
-	for index, item := range items {
-		if item == target {
-			return index
-		}
+	index := sort.SearchInts(items, target)
+	if index < len(items) && items[index] == target {
+		return index
 	}
 	return -1
 }

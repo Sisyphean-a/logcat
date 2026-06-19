@@ -112,6 +112,49 @@ func BenchmarkSelectionSnapshot(b *testing.B) {
 	})
 }
 
+func BenchmarkSelectedLogsLargeSelection(b *testing.B) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	for i := 0; i < 2000; i++ {
+		controller.model.VisibleLogs = append(controller.model.VisibleLogs, LogViewItem{
+			SourceIndex: i,
+			Entry: logcat.LogEntry{
+				TimeText: "06-04 16:42:18.479",
+				Level:    "I",
+				Tag:      "chromium",
+				Message:  fmt.Sprintf("[H5] message body number %d token", i),
+				Raw:      "raw",
+				Source:   "H5",
+			},
+		})
+	}
+	selected := make([]int, 0, 1000)
+	for i := 0; i < 2000; i += 2 {
+		selected = append(selected, i)
+	}
+	controller.model.Selection = SelectionState{
+		AnchorSourceIndex: selected[0],
+		FocusSourceIndex:  selected[len(selected)-1],
+		SourceIndexes:     selected,
+	}
+
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = controller.SelectedLogs()
+		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		model := controller.model
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = legacySelectedLogs(model)
+		}
+	})
+}
+
 func legacySelectionSnapshot(model Model, revision uint64, limit int) SelectionSnapshot {
 	return SelectionSnapshot{
 		Selection: SelectionState{
@@ -122,6 +165,30 @@ func legacySelectionSnapshot(model Model, revision uint64, limit int) SelectionS
 		Focused:  cloneFocusedLogItem(append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...), model.Selection.FocusSourceIndex),
 		Revision: revision,
 	}
+}
+
+func legacySelectedLogs(model Model) []LogViewItem {
+	if len(model.Selection.SourceIndexes) == 0 {
+		return nil
+	}
+	selected := make([]LogViewItem, 0, len(model.Selection.SourceIndexes))
+	for _, sourceIndex := range model.Selection.SourceIndexes {
+		index := legacyFindVisibleIndexBySource(model.VisibleLogs, sourceIndex)
+		if index == -1 {
+			continue
+		}
+		selected = append(selected, model.VisibleLogs[index])
+	}
+	return selected
+}
+
+func legacyFindVisibleIndexBySource(items []LogViewItem, sourceIndex int) int {
+	for index, item := range items {
+		if item.SourceIndex == sourceIndex {
+			return index
+		}
+	}
+	return -1
 }
 
 func BenchmarkUISnapshot(b *testing.B) {
