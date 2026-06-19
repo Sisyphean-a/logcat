@@ -331,8 +331,7 @@ export function useAppController() {
         SetSearchQuery(query).then((next: AppState) => applyNextState(next)),
       applyFilter: async (query?: string) => {
         if (query !== undefined) {
-          const next = await SetFilterDraft(query);
-          applyNextState(next, { urgent: true });
+          setFilterDraftStateInRef(stateRef, setState, query);
         }
         await withAction(ApplyFilterDraft, setActionError);
       },
@@ -587,6 +586,31 @@ function sameSelectedLog(
 
 function cloneAppStateShell(current: AppState) {
   return Object.assign(Object.create(Object.getPrototypeOf(current)), current) as AppState;
+}
+
+function cloneAppStateForFilterDraft(
+  current: AppState,
+  query: string,
+) {
+  const next = cloneAppStateShell(current);
+  next.filter = Object.assign(
+    Object.create(Object.getPrototypeOf(current.filter)),
+    current.filter,
+    { draft: query },
+  );
+  return next;
+}
+
+function setFilterDraftStateInRef(
+  stateRef: MutableRefObject<AppState>,
+  setState: (value: AppState | ((current: AppState) => AppState)) => void,
+  query: string,
+) {
+  setState((current) => {
+    const next = cloneAppStateForFilterDraft(current, query);
+    stateRef.current = next;
+    return next;
+  });
 }
 
 function syncPreviewSelection(
