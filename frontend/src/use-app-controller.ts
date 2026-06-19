@@ -68,6 +68,7 @@ export function useAppController() {
   const stateRef = useRef(state);
   const selectedLogRawRef = useRef("");
   const latestRevisionRef = useRef(state.revision);
+  const latestSearchRequestRef = useRef(0);
   const selectedSourceIndexesRef = useRef<number[]>([]);
   const focusedSourceIndexRef = useRef(-1);
   const selectionTrackingRevisionRef = useRef(state.revision);
@@ -150,6 +151,17 @@ export function useAppController() {
       return;
     }
     pendingEventFrameRef.current = requestAnimationFrame(flushPendingEventState);
+  }
+
+  function setLatestSearchState(query: string) {
+    const requestID = latestSearchRequestRef.current + 1;
+    latestSearchRequestRef.current = requestID;
+    return SetSearchQuery(query).then((next: AppState) => {
+      if (requestID !== latestSearchRequestRef.current) {
+        return;
+      }
+      applyNextState(next);
+    });
   }
 
   function applyAppendPatch(patch: StateAppendPatch) {
@@ -327,8 +339,7 @@ export function useAppController() {
       },
       setFilterDraft: (query: string) =>
         SetFilterDraft(query).then((next: AppState) => applyNextState(next, { urgent: true })),
-      setSearchQuery: (query: string) =>
-        SetSearchQuery(query).then((next: AppState) => applyNextState(next)),
+      setSearchQuery: (query: string) => setLatestSearchState(query),
       applyFilter: async (query?: string) => {
         if (query !== undefined) {
           setFilterDraftStateInRef(stateRef, setState, query);
