@@ -68,6 +68,9 @@ export function useAppController() {
   const stateRef = useRef(state);
   const selectedLogRawRef = useRef("");
   const latestRevisionRef = useRef(state.revision);
+  const selectedSourceIndexesRef = useRef<number[]>([]);
+  const focusedSourceIndexRef = useRef(-1);
+  const selectionTrackingRevisionRef = useRef(state.revision);
   const pendingEventStateRef = useRef<AppState | null>(null);
   const pendingEventFrameRef = useRef<number | null>(null);
   const pendingMetricsNodeRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +111,7 @@ export function useAppController() {
     if (clearSelectedRaw) {
       selectedLogRawRef.current = "";
     }
+    updateSelectionTracking(next);
     const commit = () => setState(next);
     if (urgent) {
       commit();
@@ -184,30 +188,32 @@ export function useAppController() {
         if (patch.revision < current.revision) {
           return current;
         }
-        const selected = new Set(patch.selectedSourceIndexes);
-        let changed = false;
-        const nextLogs = current.logs.map((row) => {
-          const isFocused = row.sourceIndex === patch.focusedSourceIndex;
-          const isSelected = selected.has(row.sourceIndex);
-          if (row.isFocused === isFocused && row.isSelected === isSelected) {
-            return row;
-          }
-          changed = true;
-          return main.LogItemView.createFrom({
-            ...row,
-            isFocused,
-            isSelected,
-          });
-        });
+        const tracking = resolveTrackedSelection(current);
+        const nextLogs = applySelectionRows(
+          current.logs,
+          collectSelectionChangeSources(
+            tracking.selectedSourceIndexes,
+            patch.selectedSourceIndexes,
+            tracking.focusedSourceIndex,
+            patch.focusedSourceIndex,
+          ),
+          patch.selectedSourceIndexes,
+          patch.focusedSourceIndex,
+        );
         const nextSelectedLog = patch.selectedLog
           ? current.selectedLog && sameSelectedLog(current.selectedLog, patch.selectedLog)
             ? current.selectedLog
             : main.SelectedLogView.createFrom(patch.selectedLog)
           : undefined;
         latestRevisionRef.current = patch.revision;
+        selectedSourceIndexesRef.current = patch.selectedSourceIndexes;
+        focusedSourceIndexRef.current = patch.focusedSourceIndex;
+        selectionTrackingRevisionRef.current = patch.revision;
         const next = cloneAppStateShell(current);
         next.revision = patch.revision;
-        if (!changed && current.selectedCount === patch.selectedCount && current.selectedLog === nextSelectedLog) {
+        if (nextLogs === current.logs &&
+          current.selectedCount === patch.selectedCount &&
+          current.selectedLog === nextSelectedLog) {
           return next;
         }
         next.selectedCount = patch.selectedCount;
@@ -216,6 +222,25 @@ export function useAppController() {
         return next;
       });
     });
+  }
+
+  function updateSelectionTracking(next: AppState) {
+    selectedSourceIndexesRef.current = collectSelectedSourceIndexes(next.logs, next.selectedCount);
+    focusedSourceIndexRef.current = next.selectedLog?.sourceIndex ?? -1;
+    selectionTrackingRevisionRef.current = next.revision;
+  }
+
+  function resolveTrackedSelection(current: AppState) {
+    if (selectionTrackingRevisionRef.current === current.revision) {
+      return {
+        selectedSourceIndexes: selectedSourceIndexesRef.current,
+        focusedSourceIndex: focusedSourceIndexRef.current,
+      };
+    }
+    return {
+      selectedSourceIndexes: collectSelectedSourceIndexes(current.logs, current.selectedCount),
+      focusedSourceIndex: current.selectedLog?.sourceIndex ?? -1,
+    };
   }
 
   useEffect(() => {
@@ -647,6 +672,134 @@ function currentPreviewSelectionSourceIndex(state: AppState) {
 
 function joinPreviewLogs(logs: main.LogItemView[]) {
   return logs.map((item) => formatPreviewLogDisplay(item)).join("\n");
+}
+
+function collectSelectedSourceIndexes(logs: AppState["logs"], selectedCount: number) {
+  if (selectedCount <= 0) {
+    return [];
+  }
+  const selected: number[] = [];
+  for (const row of logs) {
+    if (!row.isSelected) {
+      continue;
+    }
+    selected.push(row.sourceIndex);
+    if (selected.length === selectedCount) {
+      break;
+    }
+  }
+  return selected;
+}
+
+function collectSelectionChangeSources(
+  previousSelected: readonly number[],
+  nextSelected: readonly number[],
+  previousFocused: number,
+  nextFocused: number,
+) {
+  const changed: number[] = [];
+  let previousIndex = 0;
+  let nextIndex = 0;
+  while (previousIndex < previousSelected.length && nextIndex < nextSelected.length) {
+    const previousSource = previousSelected[previousIndex];
+    const nextSource = nextSelected[nextIndex];
+    if (previousSource === nextSource) {
+      previousIndex++;
+      nextIndex++;
+      continue;
+    }
+    if (previousSource < nextSource) {
+      changed.push(previousSource);
+      previousIndex++;
+      continue;
+    }
+    changed.push(nextSource);
+    nextIndex++;
+  }
+  while (previousIndex < previousSelected.length) {
+    changed.push(previousSelected[previousIndex]);
+    previousIndex++;
+  }
+  while (nextIndex < nextSelected.length) {
+    changed.push(nextSelected[nextIndex]);
+    nextIndex++;
+  }
+  pushUniqueSourceIndex(changed, previousFocused);
+  pushUniqueSourceIndex(changed, nextFocused);
+  return changed;
+}
+
+function pushUniqueSourceIndex(sourceIndexes: number[], sourceIndex: number) {
+  if (sourceIndex < 0 || sourceIndexes.includes(sourceIndex)) {
+    return;
+  }
+  sourceIndexes.push(sourceIndex);
+}
+
+function applySelectionRows(
+  logs: AppState["logs"],
+  changedSourceIndexes: readonly number[],
+  nextSelected: readonly number[],
+  nextFocused: number,
+) {
+  let nextLogs = logs;
+  for (const sourceIndex of changedSourceIndexes) {
+    const logIndex = findLogIndexBySource(logs, sourceIndex);
+    if (logIndex === -1) {
+      continue;
+    }
+    const row = logs[logIndex];
+    const isFocused = sourceIndex === nextFocused;
+    const isSelected = hasSortedSourceIndex(nextSelected, sourceIndex);
+    if (row.isFocused === isFocused && row.isSelected === isSelected) {
+      continue;
+    }
+    if (nextLogs === logs) {
+      nextLogs = logs.slice();
+    }
+    nextLogs[logIndex] = main.LogItemView.createFrom({
+      ...row,
+      isFocused,
+      isSelected,
+    });
+  }
+  return nextLogs;
+}
+
+function findLogIndexBySource(logs: AppState["logs"], sourceIndex: number) {
+  let low = 0;
+  let high = logs.length - 1;
+  while (low <= high) {
+    const middle = low + ((high - low) >> 1);
+    const current = logs[middle].sourceIndex;
+    if (current === sourceIndex) {
+      return middle;
+    }
+    if (current < sourceIndex) {
+      low = middle + 1;
+      continue;
+    }
+    high = middle - 1;
+  }
+  return -1;
+}
+
+function hasSortedSourceIndex(sourceIndexes: readonly number[], sourceIndex: number) {
+  let low = 0;
+  let high = sourceIndexes.length - 1;
+  while (low <= high) {
+    const middle = low + ((high - low) >> 1);
+    const current = sourceIndexes[middle];
+    if (current === sourceIndex) {
+      return true;
+    }
+    if (current < sourceIndex) {
+      low = middle + 1;
+      continue;
+    }
+    high = middle - 1;
+  }
+  return false;
 }
 
 function compilePreviewSearchQuery(query: string) {
