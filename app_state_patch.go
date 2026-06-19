@@ -18,7 +18,8 @@ type StateAppendPatch struct {
 }
 
 func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAppendPatch, bool) {
-	if !sameAppendPatchSnapshotContext(prev, snapshot) {
+	selectedLog, ok := appendPatchSelectedLog(prev, snapshot)
+	if !ok {
 		return StateAppendPatch{}, false
 	}
 
@@ -27,14 +28,7 @@ func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAp
 		return StateAppendPatch{}, false
 	}
 
-	appendedLogs := make([]LogItemView, len(snapshot.Model.VisibleLogs)-appendedStart)
-	cursor := newLogRowCursor(snapshot.Model.Selection)
-	for index := range snapshot.Model.VisibleLogs {
-		row := cursor.Next(snapshot.Model.VisibleLogs[index])
-		if index >= appendedStart {
-			appendedLogs[index-appendedStart] = row
-		}
-	}
+	appendedLogs := buildAppendedLogRows(snapshot.Model.VisibleLogs[appendedStart:])
 
 	return StateAppendPatch{
 		Revision:      snapshot.Revision,
@@ -43,11 +37,11 @@ func buildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAp
 		Dropped:       dropped,
 		Appended:      appendedLogs,
 		SelectedCount: len(snapshot.Model.Selection.SourceIndexes),
-		SelectedLog:   buildSnapshotSelectedLog(snapshot.Model.VisibleLogs, snapshot.Model.Selection),
+		SelectedLog:   selectedLog,
 	}, true
 }
 
-func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot) bool {
+func appendPatchSelectedLog(prev AppState, snapshot appstate.UISnapshot) (*SelectedLogView, bool) {
 	model := snapshot.Model
 	if prev.Status != model.Status ||
 		prev.ADBStatus != model.ADBStatus ||
@@ -61,16 +55,25 @@ func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot)
 		prev.Filter.DefaultFilterID != model.Filter.DefaultFilterID ||
 		prev.Search.Query != model.Search.Query ||
 		prev.Pause.Active != model.Pause.Active {
-		return false
+		return nil, false
 	}
 	if prev.SelectedCount != len(model.Selection.SourceIndexes) {
-		return false
+		return nil, false
 	}
 
-	return slices.EqualFunc(prev.Devices, model.Devices, sameDeviceItemView) &&
-		slices.EqualFunc(prev.Packages, model.Packages, samePackageInfoView) &&
-		slices.EqualFunc(prev.Filter.Saved, model.Filter.Saved, sameSavedFilterItemView) &&
-		sameSelectedLogView(prev.SelectedLog, buildSnapshotSelectedLog(model.VisibleLogs, model.Selection))
+	selectedLog := buildSnapshotSelectedLog(model.VisibleLogs, model.Selection)
+	if !slices.EqualFunc(prev.Devices, model.Devices, sameDeviceItemView) ||
+		!slices.EqualFunc(prev.Packages, model.Packages, samePackageInfoView) ||
+		!slices.EqualFunc(prev.Filter.Saved, model.Filter.Saved, sameSavedFilterItemView) ||
+		!sameSelectedLogView(prev.SelectedLog, selectedLog) {
+		return nil, false
+	}
+	return selectedLog, true
+}
+
+func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot) bool {
+	_, ok := appendPatchSelectedLog(prev, snapshot)
+	return ok
 }
 
 func sameDeviceItemView(left DeviceView, right appstate.DeviceItem) bool {
@@ -98,13 +101,7 @@ func diffAppendSnapshotWindow(
 		prevMax = prev[len(prev)-1].SourceIndex
 	}
 
-	appendedStart := len(current)
-	for index, row := range current {
-		if row.SourceIndex > prevMax {
-			appendedStart = index
-			break
-		}
-	}
+	appendedStart := findFirstSourceIndexAfter(current, prevMax)
 
 	appendedCount := len(current) - appendedStart
 	dropped := len(prev) + appendedCount - len(current)
@@ -126,6 +123,39 @@ func diffAppendSnapshotWindow(
 	}
 
 	return dropped, appendedStart, true
+}
+
+func buildAppendedLogRows(items []appstate.LogViewItem) []LogItemView {
+	if len(items) == 0 {
+		return nil
+	}
+	// 走 append patch 前已验证 selection/selectedLog 没变化，
+	// 所以新增尾部行不可能是 focused/selected，直接按原始字段投影即可。
+	rows := make([]LogItemView, len(items))
+	for index, item := range items {
+		rows[index] = LogItemView{
+			SourceIndex: item.SourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+		}
+	}
+	return rows
+}
+
+func findFirstSourceIndexAfter(items []appstate.LogViewItem, sourceIndex int) int {
+	low := 0
+	high := len(items)
+	for low < high {
+		middle := low + (high-low)/2
+		if items[middle].SourceIndex <= sourceIndex {
+			low = middle + 1
+			continue
+		}
+		high = middle
+	}
+	return low
 }
 
 func cloneSelectedLog(selected *SelectedLogView) *SelectedLogView {
