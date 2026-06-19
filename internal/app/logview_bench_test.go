@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/xiakn/logcat/internal/adb"
 	"github.com/xiakn/logcat/internal/logcat"
 )
 
@@ -121,4 +122,82 @@ func legacySelectionSnapshot(model Model, revision uint64, limit int) SelectionS
 		Focused:  cloneFocusedLogItem(append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...), model.Selection.FocusSourceIndex),
 		Revision: revision,
 	}
+}
+
+func BenchmarkUISnapshot(b *testing.B) {
+	controller := NewController(stubDeviceService{}, stubSessionStarter{})
+	controller.model.Devices = []DeviceItem{{ID: "dev-1", Model: "Pixel", Status: "device"}}
+	controller.model.Packages = []adb.PackageInfo{{Name: "com.demo.host"}}
+	controller.model.Processes = []adb.ProcessInfo{{PID: 111, Name: "com.demo.host"}}
+	controller.model.SelectedProcess = "com.demo.host"
+	controller.model.BoundPIDs = []int{111}
+	controller.model.Filter = FilterState{
+		Draft:           "tag=chromium",
+		Applied:         "tag=chromium",
+		ActiveFilterID:  "chromium",
+		DefaultFilterID: "chromium",
+		Saved: []SavedFilter{{
+			ID:          "chromium",
+			Name:        "chromium",
+			PackageName: "com.demo.host",
+			Query:       "tag=chromium",
+		}},
+		History: []string{"tag=chromium", "level=error"},
+	}
+	controller.model.Search = SearchState{Query: "token"}
+	for i := 0; i < 2000; i++ {
+		controller.model.VisibleLogs = append(controller.model.VisibleLogs, LogViewItem{
+			SourceIndex: i,
+			Entry: logcat.LogEntry{
+				TimeText: "06-04 16:42:18.479",
+				Level:    "I",
+				Tag:      "chromium",
+				Message:  fmt.Sprintf("[H5] message body number %d token", i),
+				Raw:      "raw",
+				Source:   "H5",
+			},
+		})
+	}
+	controller.model.Selection = SelectionState{
+		AnchorSourceIndex: 1997,
+		FocusSourceIndex:  1998,
+		SourceIndexes:     []int{1997, 1998, 1999},
+	}
+
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = controller.UISnapshot(1000)
+		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = legacyUISnapshot(controller.model, controller.revision, 1000)
+		}
+	})
+}
+
+func legacyUISnapshot(model Model, revision uint64, limit int) UISnapshot {
+	return UISnapshot{
+		Model:        legacyCloneUISnapshotModel(model, limit),
+		Revision:     revision,
+		VisibleCount: len(model.VisibleLogs),
+		VisibleStart: visibleWindowStart(len(model.VisibleLogs), limit),
+	}
+}
+
+func legacyCloneUISnapshotModel(model Model, limit int) Model {
+	cloned := model
+	cloned.Devices = append([]DeviceItem(nil), model.Devices...)
+	cloned.Packages = append([]adb.PackageInfo(nil), model.Packages...)
+	cloned.Processes = append([]adb.ProcessInfo(nil), model.Processes...)
+	cloned.BoundPIDs = append([]int(nil), model.BoundPIDs...)
+	cloned.Filter = cloneFilterState(model.Filter)
+	cloned.Search = SearchState{Query: model.Search.Query}
+	cloned.VisibleLogs = append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...)
+	return cloned
 }

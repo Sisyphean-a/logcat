@@ -1,7 +1,5 @@
 package app
 
-import "github.com/xiakn/logcat/internal/adb"
-
 type UISnapshot struct {
 	Model        Model
 	Revision     uint64
@@ -24,12 +22,21 @@ func (c *Controller) UISnapshot(limit int) UISnapshot {
 func cloneUISnapshotModel(model Model, limit int) Model {
 	cloned := model
 	cloned.Devices = append([]DeviceItem(nil), model.Devices...)
-	cloned.Packages = append([]adb.PackageInfo(nil), model.Packages...)
-	cloned.Processes = append([]adb.ProcessInfo(nil), model.Processes...)
-	cloned.BoundPIDs = append([]int(nil), model.BoundPIDs...)
-	cloned.Filter = cloneFilterState(model.Filter)
+	cloned.Packages = append(cloned.Packages[:0], model.Packages...)
+	cloned.Processes = nil
+	cloned.SelectedProcess = ""
+	cloned.BoundPIDs = nil
+	cloned.Filter = cloneUISnapshotFilterState(model.Filter)
 	cloned.Search = SearchState{Query: model.Search.Query}
 	cloned.VisibleLogs = append([]LogViewItem(nil), visibleWindow(model.VisibleLogs, limit)...)
+	cloned.Selection.SourceIndexes = append([]int(nil), model.Selection.SourceIndexes...)
+	return cloned
+}
+
+func cloneUISnapshotFilterState(state FilterState) FilterState {
+	cloned := state
+	cloned.Saved = append([]SavedFilter(nil), state.Saved...)
+	cloned.History = nil
 	return cloned
 }
 
