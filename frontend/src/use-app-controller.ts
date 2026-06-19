@@ -162,16 +162,13 @@ export function useAppController() {
           return current;
         }
         const retained = patch.dropped > 0 ? current.logs.slice(patch.dropped) : current.logs.slice();
-        const appended = patch.appended.map((row) => main.LogItemView.createFrom(row));
         const next = cloneAppStateShell(current);
         next.revision = patch.revision;
         next.totalLogs = patch.totalLogs;
         next.visibleCount = patch.visibleCount;
         next.selectedCount = patch.selectedCount;
-        next.selectedLog = patch.selectedLog
-          ? main.SelectedLogView.createFrom(patch.selectedLog)
-          : undefined;
-        next.logs = retained.concat(appended);
+        next.selectedLog = patch.selectedLog;
+        next.logs = retained.concat(patch.appended);
         latestRevisionRef.current = patch.revision;
         return next;
       });
@@ -203,7 +200,7 @@ export function useAppController() {
         const nextSelectedLog = patch.selectedLog
           ? current.selectedLog && sameSelectedLog(current.selectedLog, patch.selectedLog)
             ? current.selectedLog
-            : main.SelectedLogView.createFrom(patch.selectedLog)
+            : patch.selectedLog
           : undefined;
         latestRevisionRef.current = patch.revision;
         selectedSourceIndexesRef.current = patch.selectedSourceIndexes;
