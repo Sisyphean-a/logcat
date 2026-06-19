@@ -161,14 +161,13 @@ export function useAppController() {
         if (patch.revision < current.revision) {
           return current;
         }
-        const retained = patch.dropped > 0 ? current.logs.slice(patch.dropped) : current.logs.slice();
         const next = cloneAppStateShell(current);
         next.revision = patch.revision;
         next.totalLogs = patch.totalLogs;
         next.visibleCount = patch.visibleCount;
         next.selectedCount = patch.selectedCount;
         next.selectedLog = patch.selectedLog;
-        next.logs = retained.concat(patch.appended);
+        next.logs = mergeAppendedLogs(current.logs, patch.dropped, patch.appended);
         latestRevisionRef.current = patch.revision;
         return next;
       });
@@ -759,6 +758,23 @@ function applySelectionRows(
       isFocused,
       isSelected,
     });
+  }
+  return nextLogs;
+}
+
+function mergeAppendedLogs(
+  currentLogs: AppState["logs"],
+  dropped: number,
+  appended: AppState["logs"],
+) {
+  const retainedStart = dropped > 0 ? dropped : 0;
+  const retainedCount = currentLogs.length - retainedStart;
+  const nextLogs = new Array<AppState["logs"][number]>(retainedCount + appended.length);
+  for (let index = 0; index < retainedCount; index++) {
+    nextLogs[index] = currentLogs[retainedStart + index];
+  }
+  for (let index = 0; index < appended.length; index++) {
+    nextLogs[retainedCount + index] = appended[index];
   }
   return nextLogs;
 }
