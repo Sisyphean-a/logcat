@@ -86,13 +86,50 @@ func BenchmarkMarshalStateAppendPatch(b *testing.B) {
 func BenchmarkBuildStateAppendPatch(b *testing.B) {
 	prev, nextSnapshot := benchmarkAppendPatchPair()
 
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, ok := buildStateAppendPatch(prev, nextSnapshot); !ok {
-			b.Fatal("expected append patch")
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, ok := buildStateAppendPatch(prev, nextSnapshot); !ok {
+				b.Fatal("expected append patch")
+			}
 		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, ok := legacyBuildStateAppendPatch(prev, nextSnapshot); !ok {
+				b.Fatal("expected append patch")
+			}
+		}
+	})
+}
+
+func BenchmarkBuildSnapshotSelectedLog(b *testing.B) {
+	snapshot := benchmarkUISnapshot()
+	selection := appstate.SelectionState{
+		AnchorSourceIndex: 996,
+		FocusSourceIndex:  998,
+		SourceIndexes:     []int{996, 997, 998},
 	}
+
+	b.Run("current", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = buildSnapshotSelectedLog(snapshot.Model.VisibleLogs, selection)
+		}
+	})
+
+	b.Run("legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = legacyBuildSnapshotSelectedLog(snapshot.Model.VisibleLogs, selection)
+		}
+	})
 }
 
 func BenchmarkMarshalSelectionPatch(b *testing.B) {
@@ -303,4 +340,55 @@ func legacyNewAppState(snapshot appstate.UISnapshot) AppState {
 	}
 
 	return state
+}
+
+func legacyBuildSnapshotSelectedLog(items []appstate.LogViewItem, selection appstate.SelectionState) *SelectedLogView {
+	if selection.FocusSourceIndex < 0 {
+		return nil
+	}
+	for _, item := range items {
+		if item.SourceIndex != selection.FocusSourceIndex {
+			continue
+		}
+		row := LogItemView{
+			SourceIndex: item.SourceIndex,
+			TimeText:    item.Entry.TimeText,
+			Level:       item.Entry.Level,
+			Tag:         item.Entry.Tag,
+			Message:     item.Entry.Message,
+			IsFocused:   true,
+		}
+		return buildSelectedLogView(row, item.Entry.Source)
+	}
+	return nil
+}
+
+func legacyBuildStateAppendPatch(prev AppState, snapshot appstate.UISnapshot) (StateAppendPatch, bool) {
+	if !sameAppendPatchSnapshotContext(prev, snapshot) {
+		return StateAppendPatch{}, false
+	}
+
+	dropped, appendedStart, ok := diffAppendSnapshotWindow(prev.Logs, snapshot.Model.VisibleLogs, snapshot.Model.Selection)
+	if !ok {
+		return StateAppendPatch{}, false
+	}
+
+	appendedLogs := make([]LogItemView, len(snapshot.Model.VisibleLogs)-appendedStart)
+	cursor := newLogRowCursor(snapshot.Model.Selection)
+	for index := range snapshot.Model.VisibleLogs {
+		row := cursor.Next(snapshot.Model.VisibleLogs[index])
+		if index >= appendedStart {
+			appendedLogs[index-appendedStart] = row
+		}
+	}
+
+	return StateAppendPatch{
+		Revision:      snapshot.Revision,
+		TotalLogs:     snapshot.Model.TotalLogs,
+		VisibleCount:  snapshot.VisibleCount,
+		Dropped:       dropped,
+		Appended:      appendedLogs,
+		SelectedCount: len(snapshot.Model.Selection.SourceIndexes),
+		SelectedLog:   legacyBuildSnapshotSelectedLog(snapshot.Model.VisibleLogs, snapshot.Model.Selection),
+	}, true
 }

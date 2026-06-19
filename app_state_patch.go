@@ -147,21 +147,37 @@ func buildSnapshotSelectedLog(items []appstate.LogViewItem, selection appstate.S
 	if selection.FocusSourceIndex < 0 {
 		return nil
 	}
-	for _, item := range items {
-		if item.SourceIndex != selection.FocusSourceIndex {
-			continue
-		}
-		row := LogItemView{
-			SourceIndex: item.SourceIndex,
-			TimeText:    item.Entry.TimeText,
-			Level:       item.Entry.Level,
-			Tag:         item.Entry.Tag,
-			Message:     item.Entry.Message,
-			IsFocused:   true,
-		}
-		return buildSelectedLogView(row, item.Entry.Source)
+	item, ok := findLogViewItemBySourceIndex(items, selection.FocusSourceIndex)
+	if !ok {
+		return nil
 	}
-	return nil
+	row := LogItemView{
+		SourceIndex: item.SourceIndex,
+		TimeText:    item.Entry.TimeText,
+		Level:       item.Entry.Level,
+		Tag:         item.Entry.Tag,
+		Message:     item.Entry.Message,
+		IsFocused:   true,
+	}
+	return buildSelectedLogView(row, item.Entry.Source)
+}
+
+func findLogViewItemBySourceIndex(items []appstate.LogViewItem, sourceIndex int) (appstate.LogViewItem, bool) {
+	low := 0
+	high := len(items) - 1
+	for low <= high {
+		middle := low + (high-low)/2
+		current := items[middle]
+		switch {
+		case current.SourceIndex == sourceIndex:
+			return current, true
+		case current.SourceIndex < sourceIndex:
+			low = middle + 1
+		default:
+			high = middle - 1
+		}
+	}
+	return appstate.LogViewItem{}, false
 }
 
 func applyAppendPatch(state AppState, patch StateAppendPatch) AppState {
