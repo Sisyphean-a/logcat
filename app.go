@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,11 +19,13 @@ const uiLogWindowSize = 1000
 const emitThrottle = 16 * time.Millisecond
 
 type App struct {
-	ctx           context.Context
-	controller    *appstate.Controller
-	lastEmitRev   uint64
-	lastEmitState AppState
-	hasEmitState  bool
+	ctx                context.Context
+	controller         *appstate.Controller
+	lastEmitRev        uint64
+	lastEmitState      AppState
+	hasEmitState       bool
+	saveFilterState    func([]appstate.SavedFilter, []string, string) error
+	lastPersistedState persistedFilterState
 }
 
 type LogSelectionRequest struct {
@@ -31,7 +34,11 @@ type LogSelectionRequest struct {
 }
 
 func NewApp(controller *appstate.Controller) *App {
-	return &App{controller: controller}
+	return &App{
+		controller:         controller,
+		saveFilterState:    storage.SaveFilterState,
+		lastPersistedState: newPersistedFilterState(controller.FilterStateSnapshot()),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -260,8 +267,13 @@ func (a *App) runAction(action func() error) error {
 }
 
 func (a *App) persistFilters() {
-	filter := a.controller.FilterStateSnapshot()
-	_ = storage.SaveFilterState(filter.Saved, filter.History, filter.DefaultFilterID)
+	state := newPersistedFilterState(a.controller.FilterStateSnapshot())
+	if a.lastPersistedState.equal(state) {
+		return
+	}
+	if a.saveFilterState(state.Filters, state.History, state.DefaultFilterID) == nil {
+		a.lastPersistedState = state
+	}
 }
 
 func (a *App) emitState() {
@@ -316,4 +328,24 @@ func newStoppedTimer() *time.Timer {
 		<-timer.C
 	}
 	return timer
+}
+
+type persistedFilterState struct {
+	Filters         []appstate.SavedFilter
+	History         []string
+	DefaultFilterID string
+}
+
+func newPersistedFilterState(filter appstate.FilterState) persistedFilterState {
+	return persistedFilterState{
+		Filters:         append([]appstate.SavedFilter(nil), filter.Saved...),
+		History:         append([]string(nil), filter.History...),
+		DefaultFilterID: filter.DefaultFilterID,
+	}
+}
+
+func (s persistedFilterState) equal(other persistedFilterState) bool {
+	return s.DefaultFilterID == other.DefaultFilterID &&
+		slices.Equal(s.History, other.History) &&
+		slices.Equal(s.Filters, other.Filters)
 }
