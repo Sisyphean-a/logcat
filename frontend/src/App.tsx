@@ -14,6 +14,7 @@ export default function App() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogBusy, setSaveDialogBusy] = useState(false);
   const [saveDialogError, setSaveDialogError] = useState("");
+  const [saveDialogInitialQuery, setSaveDialogInitialQuery] = useState("");
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [manageDialogBusy, setManageDialogBusy] = useState(false);
   const [manageDialogError, setManageDialogError] = useState("");
@@ -73,8 +74,8 @@ export default function App() {
     }
   }
 
-  async function openCreateFilterDialog(query: string) {
-    await api.setFilterDraft(query);
+  function openCreateFilterDialog(query: string) {
+    setSaveDialogInitialQuery(query);
     setSaveDialogError("");
     setSaveDialogOpen(true);
   }
@@ -109,7 +110,7 @@ export default function App() {
             onApplyFilter={(query) => void api.applyFilter(query)}
             onSearch={(query) => void api.setSearchQuery(query)}
             onToggleFollow={() => setAutoFollow(!autoFollow)}
-            onSaveFilter={(query) => void openCreateFilterDialog(query)}
+            onSaveFilter={openCreateFilterDialog}
           />
 
           <LogTable
@@ -148,9 +149,9 @@ export default function App() {
       />
       <SaveFilterDialog
         errorMessage={saveDialogError}
-        initialName={suggestFilterName(state.selectedPackage, state.filter.draft)}
+        initialName={suggestFilterName(state.selectedPackage, saveDialogInitialQuery)}
         initialPackageName={state.selectedPackage}
-        initialQuery={state.filter.draft}
+        initialQuery={saveDialogInitialQuery}
         open={saveDialogOpen}
         packageOptions={state.packages.map((pkg) => pkg.name)}
         saving={saveDialogBusy}

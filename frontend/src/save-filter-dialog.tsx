@@ -45,7 +45,7 @@ export function SaveFilterDialog({
       query: initialQuery,
     });
     setValidationError("");
-  }, [open]);
+  }, [initialName, initialPackageName, initialQuery, open]);
 
   useEffect(() => {
     if (!open) {
