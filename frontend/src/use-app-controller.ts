@@ -390,7 +390,13 @@ export function useAppController() {
         }),
       pauseToggle: async () => {
         const current = stateRef.current;
-        const next = shouldResumeStreaming(current) ? await ResumeKeep() : await Pause();
+        const wantsResume = shouldResumeStreaming(current);
+        const next = wantsResume ? await ResumeKeep() : await Pause();
+        if (wantsResume && !next.sessionActive && hasStartFailureStatus(next.status)) {
+          setActionError(next.status);
+        } else {
+          setActionError("");
+        }
         applyNextState(next);
       },
       clearVisible: () =>
@@ -1143,6 +1149,10 @@ function createPreviewApi(
 
 function shouldResumeStreaming(state: Pick<AppState, "sessionActive" | "pause">) {
   return state.pause.active || !state.sessionActive;
+}
+
+function hasStartFailureStatus(status: string) {
+  return status !== "" && status !== "running" && status !== "idle";
 }
 
 function upsertPreviewFilter(filters: main.SavedFilterView[], nextFilter: main.SavedFilterView) {

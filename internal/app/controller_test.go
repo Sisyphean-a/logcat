@@ -391,6 +391,38 @@ func TestControllerSelectDeviceDoesNotStartSessionUntilResume(t *testing.T) {
 	})
 }
 
+func TestControllerResumeKeepRestartsWhenPreviousSessionAlreadyExited(t *testing.T) {
+	starter := &recordingSessionStarter{}
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+			devices: []adb.DeviceInfo{
+				{ID: "emulator-5554", Model: "Pixel_7", Status: "device"},
+			},
+		},
+		starter,
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.SelectDevice(context.Background(), "emulator-5554"); err != nil {
+		t.Fatalf("SelectDevice returned error: %v", err)
+	}
+
+	controller.ResumeKeep()
+	waitFor(t, func() bool {
+		return !controller.UISnapshot(10).SessionActive
+	})
+
+	controller.ResumeKeep()
+	waitFor(t, func() bool {
+		starter.mu.Lock()
+		defer starter.mu.Unlock()
+		return len(starter.configs) == 2
+	})
+}
+
 func TestControllerRejectsNonReadyDevices(t *testing.T) {
 	cases := []struct {
 		name           string

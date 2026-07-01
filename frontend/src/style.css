@@ -308,6 +308,18 @@ button:disabled {
   min-width: 0;
 }
 
+.action-banner {
+  min-height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--dialog-danger-border);
+  background: var(--dialog-danger-bg);
+  color: var(--dialog-danger-text);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
 .viewer {
   display: flex;
   flex: 1;

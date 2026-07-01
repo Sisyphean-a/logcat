@@ -15,21 +15,22 @@ tags: [frontend, wails, device-tracking, session-state, status-feedback]
 
 ## 2. 根因
 
-前端一直用 `pause.active` 推断工具栏该显示开始还是暂停，但这只表示“当前是否处于暂停展示态”，不等于“当前是否真的存在活跃日志会话”。
+问题有两层：
 
-热插拔后如果后端保留了运行意图、但暂时没有活跃会话（例如应用未运行，`app_not_running`），会出现：
+1. 前端一直用 `pause.active` 推断工具栏该显示开始还是暂停，但这只表示“当前是否处于暂停展示态”，不等于“当前是否真的存在活跃日志会话”。
+2. 后端 session 实际结束时，没有把当前活跃 session 标记清掉；这样 `hasActiveSession()` 还会继续返回 true，恢复逻辑会误以为还有一条可继续的会话。
 
-- `pause.active = false`
-- 实际 `sessionCancel == nil`
+这会造成两种错误表现：
 
-这会让前端把“无活跃会话”误判成“正在运行”，从而把开始入口和点击行为都导向错误分支。
+- 热插拔后，界面把“无活跃会话”误判成“正在运行”
+- 用户点击播放时，恢复逻辑可能只是在一条已失效会话上切换暂停态，而不会真正重启 session
 
 ## 3. 修复方案
 
 - 在 `UISnapshot` / `AppState` 中显式暴露 `sessionActive`
+- session 消费协程结束时，若它仍是当前活跃 session，则同步清掉活跃标记
 - 工具栏根据 `sessionActive + pause.active` 判断显示开始还是暂停
-- 点击播放/暂停按钮时，前端优先按 `sessionActive` 选择 `ResumeKeep()` 还是 `Pause()`
-- 状态栏把常见机器状态码翻译成可读提示，明确告诉用户为什么当前无法开始
+- 点击播放时，若本次恢复后仍未建立活跃会话，则在顶部直接提示失败原因，而不是只把信息挤在底部状态栏
 
 ## 4. 改动文件清单
 
@@ -42,11 +43,12 @@ tags: [frontend, wails, device-tracking, session-state, status-feedback]
 - `frontend/src/use-app-controller.ts`
 - `frontend/src/App.tsx`
 - `frontend/src/mock-state.ts`
+- `frontend/src/style.css`
 - `frontend/wailsjs/go/models.ts`
 
 ## 5. 验证结果
 
-- `go test ./internal/app -run 'TestController(SelectDeviceDoesNotStartSessionUntilResume|SyncDevicesRestoresPackageContextAcrossReplacementDevice|SyncDevicesKeepsLogsAndPackageContextWhenDeviceBecomesUnavailable|SyncDevicesDeduplicatesOfflineAndReadyEntries|ReconcileTrackedDevicesPromotesOfflineDeviceToReadySnapshot)' -v`
+- `go test ./internal/app -run 'TestController(SelectDeviceDoesNotStartSessionUntilResume|ResumeKeepRestartsWhenPreviousSessionAlreadyExited|SyncDevicesRestoresPackageContextAcrossReplacementDevice|SyncDevicesKeepsLogsAndPackageContextWhenDeviceBecomesUnavailable|SyncDevicesDeduplicatesOfflineAndReadyEntries|ReconcileTrackedDevicesPromotesOfflineDeviceToReadySnapshot)' -v`
 - `go test . -run 'TestNewAppState(SelectedLogOmitsRawPayload|IncludesSessionActive)' -v`
 - `go test ./...`
 - `npm --prefix frontend run build`

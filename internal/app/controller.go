@@ -40,6 +40,8 @@ type Controller struct {
 	nextSourceIndex      int
 	revision             uint64
 	sessionCancel        context.CancelFunc
+	activeSessionID      uint64
+	sessionSerial        uint64
 	watchCancel          context.CancelFunc
 	pauseBuffer          []logcat.LogEntry
 	pauseBufferCap       int
@@ -233,31 +235,54 @@ func (c *Controller) selectDevice(
 
 func (c *Controller) startSession(ctx context.Context, cfg session.Config) error {
 	sessionCtx, cancel := context.WithCancel(ctx)
-	c.swapSession(cancel)
+	sessionID := c.swapSession(cancel)
 
 	handle, err := c.sessionStart.Start(sessionCtx, cfg)
 	if err != nil {
 		cancel()
+		c.clearSessionIfCurrent(sessionID)
 		c.updateStatus(err.Error())
 		return err
 	}
 
 	c.updateStatus("running")
-	go c.consume(handle)
+	go c.consume(handle, sessionID)
 	return nil
 }
 
-func (c *Controller) swapSession(cancel context.CancelFunc) {
+func (c *Controller) swapSession(cancel context.CancelFunc) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.sessionCancel != nil {
 		c.sessionCancel()
 	}
+	if cancel == nil {
+		c.sessionCancel = nil
+		c.activeSessionID = 0
+		c.markDirtyLocked()
+		return 0
+	}
+	c.sessionSerial++
 	c.sessionCancel = cancel
+	c.activeSessionID = c.sessionSerial
+	c.markDirtyLocked()
+	return c.activeSessionID
 }
 
-func (c *Controller) consume(handle session.Handle) {
+func (c *Controller) clearSessionIfCurrent(sessionID uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if sessionID == 0 || c.activeSessionID != sessionID || c.sessionCancel == nil {
+		return
+	}
+	c.sessionCancel = nil
+	c.activeSessionID = 0
+	c.markDirtyLocked()
+}
+
+func (c *Controller) consume(handle session.Handle, sessionID uint64) {
 	for event := range handle.Events() {
 		if event.Entry != nil {
 			c.pushEntry(*event.Entry)
@@ -266,6 +291,7 @@ func (c *Controller) consume(handle session.Handle) {
 			c.updateStatus(event.Problem.Error())
 		}
 	}
+	c.clearSessionIfCurrent(sessionID)
 }
 
 func (c *Controller) updateStatus(status string) {

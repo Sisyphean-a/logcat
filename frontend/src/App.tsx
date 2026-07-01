@@ -39,6 +39,8 @@ export default function App() {
     () => buildResultSearchPreview(state.search.query),
     [state.search.query],
   );
+  const actionNotice = actionError ? humanizeStatus(actionError) : "";
+  const statusText = displayStatus(actionError, state.filter.error, state.status);
 
   useEffect(() => {
     if (!state.selectedLog) {
@@ -100,6 +102,7 @@ export default function App() {
         onExport={() => void api.exportVisible()}
         onOpenSettings={() => setSettingsDialogOpen(true)}
       />
+      {actionNotice && <div className="action-banner">{actionNotice}</div>}
 
       <main className="workspace">
         <section className="viewer">
@@ -145,7 +148,7 @@ export default function App() {
       <StatusBar
         state={state}
         autoFollow={autoFollow}
-        statusText={displayStatus(actionError, state.filter.error, state.status)}
+        statusText={statusText}
       />
       <SaveFilterDialog
         errorMessage={saveDialogError}
