@@ -25,15 +25,19 @@ func (c *Controller) currentSessionConfig() (session.Config, error) {
 	if deviceID == "" {
 		return session.Config{}, fmt.Errorf("device_not_selected")
 	}
-	if c.binding.PackageName != "" && len(c.binding.PIDs) == 0 {
-		return session.Config{}, notRunningError(c.binding.PackageName, c.binding.ProcessName)
+	packageName := c.binding.PackageName
+	processName := c.binding.ProcessName
+	pids := c.binding.PIDs
+	if len(pids) == 0 {
+		packageName = ""
+		processName = ""
 	}
 
 	return sessionConfig(
 		deviceID,
-		c.binding.PackageName,
-		c.binding.ProcessName,
-		c.binding.PIDs,
+		packageName,
+		processName,
+		pids,
 	), nil
 }
 
@@ -66,7 +70,7 @@ func (c *Controller) prepareStoppedBinding(
 	processName string,
 	processes []adb.ProcessInfo,
 	preserveLogs bool,
-) error {
+) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -79,7 +83,6 @@ func (c *Controller) prepareStoppedBinding(
 	c.resetBindingViewLocked(!preserveLogs)
 	c.model.Pause.Active = true
 	c.updateBoundModelLocked(packageName, processName, processes, nil)
-	return notRunningError(packageName, processName)
 }
 
 func (c *Controller) startCurrentSelection(ctx context.Context) error {

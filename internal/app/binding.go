@@ -43,16 +43,17 @@ func (c *Controller) selectPackage(
 	switch c.currentSessionIntent() {
 	case sessionIntentNone:
 		if len(processes) == 0 {
-			err := c.prepareStoppedBinding(deviceID, packageName, "", nil, preserveLogs)
+			c.prepareStoppedBinding(deviceID, packageName, "", nil, preserveLogs)
 			c.startBindingWatcher(deviceID, packageName, "")
-			return err
+			return nil
 		}
 		c.prepareBindingSelection(deviceID, packageName, "", processes, collectPIDs(processes), preserveLogs)
 		c.startBindingWatcher(deviceID, packageName, "")
 		return nil
 	case sessionIntentPaused:
 		if len(processes) == 0 {
-			return c.activateStoppedBinding(deviceID, packageName, "", nil, true, preserveLogs)
+			c.activateStoppedBinding(ctx, deviceID, packageName, "", nil, true, preserveLogs)
+			return nil
 		}
 		return c.activateRunningBinding(
 			ctx,
@@ -66,7 +67,7 @@ func (c *Controller) selectPackage(
 		)
 	default:
 		if len(processes) == 0 {
-			return c.activateStoppedBinding(deviceID, packageName, "", nil, false, preserveLogs)
+			return c.activateStoppedBinding(ctx, deviceID, packageName, "", nil, false, preserveLogs)
 		}
 		return c.activateRunningBinding(
 			ctx,
@@ -175,6 +176,7 @@ func (c *Controller) activateRunningBinding(
 }
 
 func (c *Controller) activateStoppedBinding(
+	ctx context.Context,
 	deviceID string,
 	packageName string,
 	processName string,
@@ -183,7 +185,14 @@ func (c *Controller) activateStoppedBinding(
 	preserveLogs bool,
 ) error {
 	c.stopWatcher()
-	c.stopSession()
+
+	if !paused {
+		if err := c.startSession(ctx, sessionConfig(deviceID, "", "", nil)); err != nil {
+			return err
+		}
+	} else {
+		c.stopSession()
+	}
 
 	c.mu.Lock()
 	c.binding = SessionBinding{
@@ -198,9 +207,10 @@ func (c *Controller) activateStoppedBinding(
 	c.mu.Unlock()
 
 	c.startBindingWatcher(deviceID, packageName, processName)
-	err := notRunningError(packageName, processName)
-	c.updateStatus(err.Error())
-	return err
+	if paused {
+		c.updateStatus(notRunningError(packageName, processName).Error())
+	}
+	return nil
 }
 
 func (c *Controller) updateBoundModelLocked(

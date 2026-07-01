@@ -968,7 +968,7 @@ func TestControllerSelectForegroundPackageUsesForegroundPackage(t *testing.T) {
 	}
 }
 
-func TestControllerSelectPackageNotRunningStopsOldBinding(t *testing.T) {
+func TestControllerSelectPackageNotRunningKeepsFallbackSession(t *testing.T) {
 	starter := &recordingSessionStarter{}
 	controller := NewController(
 		stubDeviceService{
@@ -994,14 +994,14 @@ func TestControllerSelectPackageNotRunningStopsOldBinding(t *testing.T) {
 		return len(starter.contexts) == 1
 	})
 
-	err := controller.SelectPackage(context.Background(), "com.demo.host")
-	if err == nil {
-		t.Fatal("expected SelectPackage error")
+	if err := controller.SelectPackage(context.Background(), "com.demo.host"); err != nil {
+		t.Fatalf("SelectPackage returned error: %v", err)
 	}
 
 	starter.mu.Lock()
 	first := starter.contexts[0]
 	configCount := len(starter.configs)
+	second := starter.configs[1]
 	starter.mu.Unlock()
 
 	select {
@@ -1011,17 +1011,23 @@ func TestControllerSelectPackageNotRunningStopsOldBinding(t *testing.T) {
 	}
 
 	model := controller.Model()
-	if !strings.Contains(model.Status, "app_not_running") {
-		t.Fatalf("expected app_not_running status, got %q", model.Status)
-	}
 	if model.SelectedPackage != "com.demo.host" {
 		t.Fatalf("expected selected package to stay on target, got %q", model.SelectedPackage)
 	}
 	if len(model.BoundPIDs) != 0 {
 		t.Fatalf("expected bound pids to clear, got %#v", model.BoundPIDs)
 	}
-	if configCount != 1 {
-		t.Fatalf("expected no replacement session on not running app, got %d configs", configCount)
+	if configCount != 2 {
+		t.Fatalf("expected replacement fallback session on not running app, got %d configs", configCount)
+	}
+	if second.PackageName != "" || second.ProcessName != "" {
+		t.Fatalf("expected fallback session without package binding, got package=%q process=%q", second.PackageName, second.ProcessName)
+	}
+	if len(second.AllowedPIDs) != 0 {
+		t.Fatalf("expected fallback session without pid filter, got %#v", second.AllowedPIDs)
+	}
+	if !controller.UISnapshot(10).SessionActive {
+		t.Fatal("expected fallback session to remain active")
 	}
 }
 
@@ -1234,8 +1240,8 @@ func TestControllerSyncDevicesRestoresPackageContextAcrossReplacementDevice(t *t
 	err := controller.syncDevices(context.Background(), []adb.DeviceInfo{
 		{ID: "device-2", Model: "SM_A217F", Status: "device"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "app_not_running: com.demo.host") {
-		t.Fatalf("expected package restore not-running error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected package restore to keep fallback session, got %v", err)
 	}
 
 	model := controller.Model()
@@ -1257,8 +1263,8 @@ func TestControllerSyncDevicesRestoresPackageContextAcrossReplacementDevice(t *t
 	if model.Pause.Active {
 		t.Fatal("expected running intent kept for watcher-based auto resume")
 	}
-	if controller.UISnapshot(10).SessionActive {
-		t.Fatal("expected no active session while replacement app is not running")
+	if !controller.UISnapshot(10).SessionActive {
+		t.Fatal("expected fallback session while replacement app is not running")
 	}
 }
 
@@ -1470,8 +1476,8 @@ func TestControllerWatcherRestartsSessionWhenPackageProcessReturns(t *testing.T)
 	latest := starter.configs[configCount-1]
 	starter.mu.Unlock()
 
-	if configCount != 3 {
-		t.Fatalf("expected device + package + restart sessions, got %d", configCount)
+	if configCount != 4 {
+		t.Fatalf("expected device + package + fallback + restart sessions, got %d", configCount)
 	}
 	if len(latest.AllowedPIDs) != 1 || latest.AllowedPIDs[0] != 222 {
 		t.Fatalf("unexpected restarted allowed pids: %#v", latest.AllowedPIDs)

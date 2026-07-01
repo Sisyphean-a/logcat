@@ -53,6 +53,26 @@ tags: [frontend, wails, device-tracking, session-state, status-feedback]
 - `go test ./...`
 - `npm --prefix frontend run build`
 
-## 6. 遗留事项
+## 6. 追加修复：应用未运行时仍允许开始监听
+
+用户进一步确认，当前真正阻断点击的原因是“已选应用未运行”会把开始动作当成失败路径处理。这会带来两个问题：
+
+1. 点击开始时不会建立任何监听会话；
+2. 之后即使切换筛选条件，之前那次“我已经点了开始”的意图也没有被保留。
+
+本次追加修复做了两件事：
+
+- 选中未运行应用时不再抛错阻断，而是进入“等待绑定”状态；
+- 点击开始或运行中目标进程消失时，会退回基础 logcat 监听（无 PID 过滤），同时保留包绑定 watcher，等目标进程出现后再自动切回对应 PID。
+
+对应调整的后端文件：
+
+- `internal/app/binding.go`
+- `internal/app/streaming_state.go`
+- `internal/app/binding_watcher.go`
+- `internal/app/controller_test.go`
+- `internal/app/streaming_recovery_test.go`
+
+## 7. 遗留事项
 
 - 本地缺少 `codestable-worktree-gate.py`，本次无法执行 start / commit gate；已按现有仓库工具集完成代码与测试验证。
