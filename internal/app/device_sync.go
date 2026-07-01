@@ -71,7 +71,7 @@ func (c *Controller) reconcileTrackedDevices() {
 }
 
 func (c *Controller) syncDevices(ctx context.Context, devices []adb.DeviceInfo) error {
-	selection, previousDevice, changed := c.applyDeviceSnapshot(devices)
+	selection, previousDevice, changed := c.applyDeviceSnapshot(normalizeDeviceSnapshot(devices))
 	if !changed {
 		return nil
 	}
@@ -102,6 +102,51 @@ func (c *Controller) applyDeviceSnapshot(devices []adb.DeviceInfo) (string, stri
 	c.model.SelectedDevice = selection
 	c.markDirtyLocked()
 	return selection, previousDevice, true
+}
+
+func normalizeDeviceSnapshot(devices []adb.DeviceInfo) []adb.DeviceInfo {
+	if len(devices) < 2 {
+		return append([]adb.DeviceInfo(nil), devices...)
+	}
+
+	ordered := make([]adb.DeviceInfo, 0, len(devices))
+	indexByID := make(map[string]int, len(devices))
+	for _, device := range devices {
+		index, exists := indexByID[device.ID]
+		if !exists {
+			indexByID[device.ID] = len(ordered)
+			ordered = append(ordered, device)
+			continue
+		}
+		ordered[index] = preferDeviceSnapshot(ordered[index], device)
+	}
+	return ordered
+}
+
+func preferDeviceSnapshot(current adb.DeviceInfo, candidate adb.DeviceInfo) adb.DeviceInfo {
+	if deviceStatusRank(candidate.Status) > deviceStatusRank(current.Status) {
+		return candidate
+	}
+	if current.Model == "" && candidate.Model != "" {
+		current.Model = candidate.Model
+	}
+	if current.Transport == "" && candidate.Transport != "" {
+		current.Transport = candidate.Transport
+	}
+	return current
+}
+
+func deviceStatusRank(status string) int {
+	switch status {
+	case "device":
+		return 3
+	case "unauthorized":
+		return 2
+	case "offline":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func resolveSelectedDevice(

@@ -27,8 +27,14 @@ import {
 } from "../wailsjs/go/main/App";
 import { type SaveFilterDraft } from "./filter-rule-builder";
 import { type SavedFiltersDraft } from "./saved-filter-types";
+import {
+  applyStateAppendPatch,
+  cloneAppStateShell,
+  type AppState,
+  type StateAppendPatch,
+} from "./state-stream";
 
-export type AppState = main.AppState;
+export type { AppState } from "./state-stream";
 export type LogSelectionMode = "replace" | "add" | "range";
 export type ResultSearchPreview = {
   query: string;
@@ -40,16 +46,6 @@ export type SelectedLogDetail = {
 
 const stateEventName = "state:updated";
 const stateAppendEventName = "state:append";
-
-type StateAppendPatch = {
-  revision: number;
-  totalLogs: number;
-  visibleCount: number;
-  dropped: number;
-  appended: AppState["logs"];
-  selectedCount: number;
-  selectedLog?: AppState["selectedLog"];
-};
 
 type SelectionPatch = main.SelectionPatch;
 
@@ -77,8 +73,10 @@ export function useAppController() {
   const pendingEventFrameRef = useRef<number | null>(null);
   const pendingMetricsNodeRef = useRef<HTMLDivElement | null>(null);
   const pendingMetricsFrameRef = useRef<number | null>(null);
-  stateRef.current = state;
-  latestRevisionRef.current = state.revision;
+  if (!pendingEventStateRef.current || state.revision >= pendingEventStateRef.current.revision) {
+    stateRef.current = state;
+    latestRevisionRef.current = state.revision;
+  }
 
   function syncTableMetrics(node: HTMLDivElement) {
     setScrollTop(node.scrollTop);
@@ -114,6 +112,7 @@ export function useAppController() {
       selectedLogRawRef.current = "";
     }
     updateSelectionTracking(next);
+    stateRef.current = next;
     const commit = () => setState(next);
     if (urgent) {
       commit();
@@ -140,18 +139,30 @@ export function useAppController() {
     applyNextState(next);
   }
 
-  function queueEventState(next: AppState) {
-    if (next.revision < latestRevisionRef.current) {
-      return;
-    }
-    const pending = pendingEventStateRef.current;
-    if (!pending || next.revision >= pending.revision) {
-      pendingEventStateRef.current = next;
-    }
+  function schedulePendingEventState() {
     if (pendingEventFrameRef.current !== null) {
       return;
     }
     pendingEventFrameRef.current = requestAnimationFrame(flushPendingEventState);
+  }
+
+  function queuePendingEventState(next: AppState) {
+    if (next.revision < latestRevisionRef.current) {
+      return;
+    }
+    const pending = pendingEventStateRef.current;
+    if (pending && next.revision < pending.revision) {
+      return;
+    }
+    pendingEventStateRef.current = next;
+    stateRef.current = next;
+    updateSelectionTracking(next);
+    latestRevisionRef.current = next.revision;
+    schedulePendingEventState();
+  }
+
+  function queueEventState(next: AppState) {
+    queuePendingEventState(next);
   }
 
   function setLatestSearchState(query: string) {
@@ -182,25 +193,14 @@ export function useAppController() {
   }
 
   function applyAppendPatch(patch: StateAppendPatch) {
-    if (patch.revision < latestRevisionRef.current) {
+    const pending = pendingEventStateRef.current;
+    const base = pending && pending.revision >= stateRef.current.revision
+      ? pending
+      : stateRef.current;
+    if (patch.revision < base.revision) {
       return;
     }
-    startTransition(() => {
-      setState((current) => {
-        if (patch.revision < current.revision) {
-          return current;
-        }
-        const next = cloneAppStateShell(current);
-        next.revision = patch.revision;
-        next.totalLogs = patch.totalLogs;
-        next.visibleCount = patch.visibleCount;
-        next.selectedCount = patch.selectedCount;
-        next.selectedLog = patch.selectedLog ?? current.selectedLog;
-        next.logs = mergeAppendedLogs(current.logs, patch.dropped, patch.appended);
-        latestRevisionRef.current = patch.revision;
-        return next;
-      });
-    });
+    queuePendingEventState(applyStateAppendPatch(base, patch));
   }
 
   function applySelectionPatch(patch: SelectionPatch) {
@@ -612,10 +612,6 @@ function sameSelectedLog(
     current.source === next.source;
 }
 
-function cloneAppStateShell(current: AppState) {
-  return Object.assign(Object.create(Object.getPrototypeOf(current)), current) as AppState;
-}
-
 function cloneAppStateForFilterDraft(
   current: AppState,
   query: string,
@@ -824,23 +820,6 @@ function cloneLogRowWithSelection(
     isFocused,
     isSelected,
   } satisfies AppState["logs"][number];
-}
-
-function mergeAppendedLogs(
-  currentLogs: AppState["logs"],
-  dropped: number,
-  appended: AppState["logs"],
-) {
-  const retainedStart = dropped > 0 ? dropped : 0;
-  const retainedCount = currentLogs.length - retainedStart;
-  const nextLogs = new Array<AppState["logs"][number]>(retainedCount + appended.length);
-  for (let index = 0; index < retainedCount; index++) {
-    nextLogs[index] = currentLogs[retainedStart + index];
-  }
-  for (let index = 0; index < appended.length; index++) {
-    nextLogs[retainedCount + index] = appended[index];
-  }
-  return nextLogs;
 }
 
 function findLogIndexBySource(logs: AppState["logs"], sourceIndex: number) {

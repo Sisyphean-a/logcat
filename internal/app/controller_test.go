@@ -1261,6 +1261,36 @@ func TestControllerReconcileTrackedDevicesPromotesOfflineDeviceToReadySnapshot(t
 	}
 }
 
+func TestControllerSyncDevicesDeduplicatesOfflineAndReadyEntries(t *testing.T) {
+	controller := NewController(
+		stubDeviceService{
+			install: adb.Install{Path: "adb", Version: "1.0.41"},
+		},
+		stubSessionStarter{},
+	)
+
+	if err := controller.Load(context.Background()); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if err := controller.syncDevices(context.Background(), []adb.DeviceInfo{
+		{ID: "bc82a570", Model: "24122RKC7C", Status: "offline"},
+		{ID: "bc82a570", Model: "24122RKC7C", Status: "device"},
+	}); err != nil {
+		t.Fatalf("syncDevices returned error: %v", err)
+	}
+
+	model := controller.Model()
+	if model.SelectedDevice != "bc82a570" {
+		t.Fatalf("expected deduplicated ready device selected, got %q", model.SelectedDevice)
+	}
+	if len(model.Devices) != 1 {
+		t.Fatalf("expected duplicate device entries merged, got %#v", model.Devices)
+	}
+	if model.Devices[0].Status != "device" {
+		t.Fatalf("expected ready device retained, got %#v", model.Devices[0])
+	}
+}
+
 func TestControllerSelectPackageAllowsClearingSelection(t *testing.T) {
 	controller := NewController(
 		stubDeviceService{
