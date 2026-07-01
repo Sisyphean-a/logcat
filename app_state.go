@@ -9,6 +9,7 @@ type AppState struct {
 	Revision        uint64           `json:"revision"`
 	Status          string           `json:"status"`
 	ADBStatus       string           `json:"adbStatus"`
+	SessionActive   bool             `json:"sessionActive"`
 	Devices         []DeviceView     `json:"devices"`
 	SelectedDevice  string           `json:"selectedDevice"`
 	PackageScope    string           `json:"packageScope"`
@@ -88,6 +89,7 @@ func newAppState(snapshot appstate.UISnapshot) AppState {
 		Revision:        snapshot.Revision,
 		Status:          model.Status,
 		ADBStatus:       model.ADBStatus,
+		SessionActive:   snapshot.SessionActive,
 		Devices:         make([]DeviceView, len(model.Devices)),
 		SelectedDevice:  model.SelectedDevice,
 		PackageScope:    string(model.PackageScope),

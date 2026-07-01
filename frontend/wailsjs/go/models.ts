@@ -183,6 +183,7 @@ export namespace main {
 	    revision: number;
 	    status: string;
 	    adbStatus: string;
+	    sessionActive: boolean;
 	    devices: DeviceView[];
 	    selectedDevice: string;
 	    packageScope: string;
@@ -206,6 +207,7 @@ export namespace main {
 	        this.revision = source["revision"];
 	        this.status = source["status"];
 	        this.adbStatus = source["adbStatus"];
+	        this.sessionActive = source["sessionActive"];
 	        this.devices = this.convertValues(source["devices"], DeviceView);
 	        this.selectedDevice = source["selectedDevice"];
 	        this.packageScope = source["packageScope"];
@@ -301,4 +303,3 @@ export namespace main {
 	}
 
 }
-

@@ -1225,6 +1225,9 @@ func TestControllerSyncDevicesRestoresPackageContextAcrossReplacementDevice(t *t
 	if model.Pause.Active {
 		t.Fatal("expected running intent kept for watcher-based auto resume")
 	}
+	if controller.UISnapshot(10).SessionActive {
+		t.Fatal("expected no active session while replacement app is not running")
+	}
 }
 
 func TestControllerReconcileTrackedDevicesPromotesOfflineDeviceToReadySnapshot(t *testing.T) {

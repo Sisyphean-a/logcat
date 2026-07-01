@@ -36,6 +36,9 @@ func TestNewAppStateSelectedLogOmitsRawPayload(t *testing.T) {
 	if state.Revision != 0 {
 		t.Fatalf("expected revision 0, got %d", state.Revision)
 	}
+	if state.SessionActive {
+		t.Fatal("expected session inactive by default")
+	}
 	if len(state.Logs) != 1 {
 		t.Fatalf("expected 1 log, got %d", len(state.Logs))
 	}
@@ -50,5 +53,12 @@ func TestNewAppStateSelectedLogOmitsRawPayload(t *testing.T) {
 	}
 	if state.SelectedLog.Message != message {
 		t.Fatal("expected selected message to stay unchanged")
+	}
+}
+
+func TestNewAppStateIncludesSessionActive(t *testing.T) {
+	state := newAppState(appstate.UISnapshot{SessionActive: true})
+	if !state.SessionActive {
+		t.Fatal("expected sessionActive copied from snapshot")
 	}
 }

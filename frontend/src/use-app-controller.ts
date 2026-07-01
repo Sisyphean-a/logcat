@@ -389,7 +389,8 @@ export function useAppController() {
           applySelectionPatch(patch);
         }),
       pauseToggle: async () => {
-        const next = stateRef.current.pause.active ? await ResumeKeep() : await Pause();
+        const current = stateRef.current;
+        const next = shouldResumeStreaming(current) ? await ResumeKeep() : await Pause();
         applyNextState(next);
       },
       clearVisible: () =>
@@ -552,6 +553,7 @@ const emptyState = new main.AppState({
   revision: 0,
   status: "loading",
   adbStatus: "未连接",
+  sessionActive: false,
   devices: [],
   selectedDevice: "",
   packageScope: "all",
@@ -1137,6 +1139,10 @@ function createPreviewApi(
       setError("");
     },
   };
+}
+
+function shouldResumeStreaming(state: Pick<AppState, "sessionActive" | "pause">) {
+  return state.pause.active || !state.sessionActive;
 }
 
 function upsertPreviewFilter(filters: main.SavedFilterView[], nextFilter: main.SavedFilterView) {

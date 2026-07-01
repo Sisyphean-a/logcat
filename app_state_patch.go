@@ -44,6 +44,7 @@ func sameAppendPatchSnapshotContext(prev AppState, snapshot appstate.UISnapshot)
 	model := snapshot.Model
 	if prev.Status != model.Status ||
 		prev.ADBStatus != model.ADBStatus ||
+		prev.SessionActive != snapshot.SessionActive ||
 		prev.SelectedDevice != model.SelectedDevice ||
 		prev.PackageScope != string(model.PackageScope) ||
 		prev.SelectedPackage != model.SelectedPackage ||

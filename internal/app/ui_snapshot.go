@@ -3,11 +3,12 @@ package app
 import "github.com/xiakn/logcat/internal/adb"
 
 type UISnapshot struct {
-	Model        Model
-	VisibleLogs  []VisibleLogSnapshot
-	Revision     uint64
-	VisibleCount int
-	VisibleStart int
+	Model         Model
+	VisibleLogs   []VisibleLogSnapshot
+	Revision      uint64
+	SessionActive bool
+	VisibleCount  int
+	VisibleStart  int
 }
 
 type VisibleLogSnapshot struct {
@@ -25,11 +26,12 @@ func (c *Controller) UISnapshot(limit int) UISnapshot {
 
 	visibleStart := visibleWindowStart(len(c.model.VisibleLogs), limit)
 	return UISnapshot{
-		Model:        cloneUISnapshotModel(c.model, limit),
-		VisibleLogs:  cloneVisibleLogSnapshots(c.model.VisibleLogs[visibleStart:]),
-		Revision:     c.revision,
-		VisibleCount: len(c.model.VisibleLogs),
-		VisibleStart: visibleStart,
+		Model:         cloneUISnapshotModel(c.model, limit),
+		VisibleLogs:   cloneVisibleLogSnapshots(c.model.VisibleLogs[visibleStart:]),
+		Revision:      c.revision,
+		SessionActive: c.sessionCancel != nil,
+		VisibleCount:  len(c.model.VisibleLogs),
+		VisibleStart:  visibleStart,
 	}
 }
 

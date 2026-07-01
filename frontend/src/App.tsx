@@ -191,7 +191,7 @@ export default function App() {
 
 function displayStatus(actionError: string, filterError: string, status: string) {
   if (actionError) {
-    return actionError;
+    return humanizeStatus(actionError);
   }
   if (filterError) {
     return filterError;
@@ -199,11 +199,46 @@ function displayStatus(actionError: string, filterError: string, status: string)
   switch (status) {
     case "":
     case "running":
+    case "idle":
       return "";
     default:
       if (status.startsWith("adb ")) {
         return "";
       }
+      return humanizeStatus(status);
+  }
+}
+
+function humanizeStatus(status: string) {
+  const normalized = status.startsWith("Error: ") ? status.slice(7) : status;
+  if (normalized === "device_not_selected") {
+    return "未选择设备，无法开始";
+  }
+  if (normalized === "foreground_package_not_found") {
+    return "未找到前台应用包名";
+  }
+  if (normalized === "runtime_not_ready") {
+    return "运行时未就绪";
+  }
+  return humanizeStatusWithDetail(normalized);
+}
+
+function humanizeStatusWithDetail(status: string) {
+  const [code, detail = ""] = status.split(": ", 2);
+  switch (code) {
+    case "app_not_running":
+      return `应用未运行：${detail}`;
+    case "process_not_running":
+      return `进程未运行：${detail}`;
+    case "device_offline":
+      return `设备离线：${detail}`;
+    case "device_unauthorized":
+      return `设备未授权：${detail}`;
+    case "device_no_permission":
+      return `设备无权限：${detail}`;
+    case "device_unavailable":
+      return `设备不可用：${detail}`;
+    default:
       return status;
   }
 }

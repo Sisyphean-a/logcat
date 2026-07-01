@@ -58,6 +58,7 @@ export function Toolbar({
       <div className="toolbar-spacer" />
       <ToolbarActions
         paused={state.pause.active}
+        sessionActive={state.sessionActive}
         onClearVisible={onClearVisible}
         onExport={onExport}
         onOpenSettings={onOpenSettings}
@@ -124,21 +125,26 @@ function SavedFilterControls({
 
 function ToolbarActions({
   paused,
+  sessionActive,
   onClearVisible,
   onExport,
   onOpenSettings,
   onPauseToggle,
 }: {
   paused: boolean;
+  sessionActive: boolean;
   onClearVisible: () => void;
   onExport: () => void;
   onOpenSettings: () => void;
   onPauseToggle: () => void;
 }) {
+  const canStart = paused || !sessionActive;
+  const pauseTitle = paused ? "恢复" : sessionActive ? "暂停" : "开始";
+
   return (
     <div className="toolbar-actions">
-      <button className="icon-button" onClick={onPauseToggle} title={paused ? "恢复" : "暂停"} type="button">
-        {paused ? <PlayIcon /> : <PauseIcon />}
+      <button className="icon-button" onClick={onPauseToggle} title={pauseTitle} type="button">
+        {canStart ? <PlayIcon /> : <PauseIcon />}
       </button>
       <button className="icon-button" onClick={onClearVisible} title="清空视图" type="button">
         <ClearIcon />

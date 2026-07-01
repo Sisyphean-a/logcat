@@ -14,6 +14,7 @@ export function createMockState() {
     revision: 1,
     status: "running",
     adbStatus: "已连接",
+    sessionActive: true,
     devices: [
       { id: "SM-A217F", model: "SM-A217F", status: "device" },
     ],
